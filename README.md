@@ -10,8 +10,10 @@ Emulates EGA text mode through a selection of live view interfaces:
 
 ## Basic use
 
+`npm install egatext-alpha`
+
 ```ts
-import { EGAText, vgaFont, drawingChars } from "egatext";
+import { EGAText, vgaFont, drawingChars } from "egatext-alpha";
 
 const screen = EGAText.init(80, 25);
 
@@ -22,8 +24,8 @@ screen.grid.paste(someOtherScreen, 10, 10);
 screen.grid.on("change", () => renderer.toCanvas(myCanvas));
 
 // pen interface
-screen.pen(14, 0).write(0, 0, "Yellow");
-screen.pen(11, 0).write(0, 1, "cyan");
+screen.pen(14, 0).write(0, 0, "Yellow text!");
+screen.pen(11, 0).write(0, 1, "Cyan text!");
 
 // live region view
 const region = screen.region(0, 5, 80, 5); // EGAText instance (live)
