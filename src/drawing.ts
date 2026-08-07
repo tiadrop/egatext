@@ -1,4 +1,4 @@
-import { LineSet } from "./types"
+import { LineSet } from "./types.js";
 
 const blockChars = {
 	fg25: 176, // ░
@@ -11,98 +11,96 @@ const blockChars = {
 	right: 222, // ▐
 }
 
-export const drawingChars = {
-	block: blockChars,
-	line: {
-		singleVert: {
-			singleHoriz: {
-				corners: {
-					topLeft: 218, // ┌
-					topRight: 191, // ┐
-					bottomLeft: 192, // └
-					bottomRight: 217, // ┘
-				},
-				straight: {
-					vert: 179, // │
-					horiz: 196, // ─
-				},
-				cross: 197, // ┼
-				junction: {
-					up: 193, // ┴
-					down: 194, // ┬
-					left: 180, // ┤
-					right: 195, // ├
-				}
+export const lineSets = {
+	singleVert: {
+		singleHoriz: {
+			corners: {
+				topLeft: 218, // ┌
+				topRight: 191, // ┐
+				bottomLeft: 192, // └
+				bottomRight: 217, // ┘
 			},
-			doubleHoriz: {
-				corners: {
-					topLeft: 213, // ╒
-					topRight: 184, // ╕
-					bottomLeft: 212, // ╘
-					bottomRight: 190, // ╛
-				},
-				straight: {
-					vert: 179, // │
-					horiz: 205, // ═
-				},
-				cross: 216, // ╪
-				junction: {
-					up: 207, // ╧
-					down: 209, // ╤
-					left: 181, // ╡
-					right: 198, // ╞
-				}
+			straight: {
+				vert: 179, // │
+				horiz: 196, // ─
 			},
+			cross: 197, // ┼
+			junction: {
+				up: 193, // ┴
+				down: 194, // ┬
+				left: 180, // ┤
+				right: 195, // ├
+			}
 		},
-		doubleVert: {
-			singleHoriz: {
-				corners: {
-					topLeft: 214, // ╓
-					topRight: 183, // ╖
-					bottomLeft: 211, // ╙
-					bottomRight: 189, // ╜
-				},
-				straight: {
-					vert: 186, // ║
-					horiz: 196, // ─
-				},
-				cross: 215, // ╫
-				junction: {
-					up: 208, // ╨
-					down: 210, // ╥
-					left: 182, // ╢
-					right: 199, // ╟
-				}
+		doubleHoriz: {
+			corners: {
+				topLeft: 213, // ╒
+				topRight: 184, // ╕
+				bottomLeft: 212, // ╘
+				bottomRight: 190, // ╛
 			},
-			doubleHoriz: {
-				corners: {
-					topLeft: 201, // ╔
-					topRight: 187, // ╗
-					bottomLeft: 200, // ╚
-					bottomRight: 188, // ╝
-				},
-				straight: {
-					vert: 186, // ║
-					horiz: 205, // ═
-				},
-				cross: 206, // ╬
-				junction: {
-					up: 202, // ╩
-					down: 203, // ╦
-					left: 185, // ╣
-					right: 204, // ╠
-				}
+			straight: {
+				vert: 179, // │
+				horiz: 205, // ═
 			},
+			cross: 216, // ╪
+			junction: {
+				up: 207, // ╧
+				down: 209, // ╤
+				left: 181, // ╡
+				right: 198, // ╞
+			}
 		},
 	},
-
+	doubleVert: {
+		singleHoriz: {
+			corners: {
+				topLeft: 214, // ╓
+				topRight: 183, // ╖
+				bottomLeft: 211, // ╙
+				bottomRight: 189, // ╜
+			},
+			straight: {
+				vert: 186, // ║
+				horiz: 196, // ─
+			},
+			cross: 215, // ╫
+			junction: {
+				up: 208, // ╨
+				down: 210, // ╥
+				left: 182, // ╢
+				right: 199, // ╟
+			}
+		},
+		doubleHoriz: {
+			corners: {
+				topLeft: 201, // ╔
+				topRight: 187, // ╗
+				bottomLeft: 200, // ╚
+				bottomRight: 188, // ╝
+			},
+			straight: {
+				vert: 186, // ║
+				horiz: 205, // ═
+			},
+			cross: 206, // ╬
+			junction: {
+				up: 202, // ╩
+				down: 203, // ╦
+				left: 185, // ╣
+				right: 204, // ╠
+			}
+		},
+	},
 } satisfies {
-	block: any,
-	line: {
-		[k: string]: {
-			[k: string]: LineSet
-		}
+	[k: string]: {
+		[k: string]: LineSet
 	}
+}
+
+export const drawingChars = {
+	block: blockChars,
+	line: lineSets
 }
 
 export const accentedChars = {

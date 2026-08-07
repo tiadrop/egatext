@@ -1,4 +1,4 @@
-export { EGAText, type CRT, EGATextCell } from "./egatext.js";
+export { EGAText, type CRT, EGATextCell, Pen } from "./egatext.js";
 export { loadBmfFont } from "./bmf.js";
 export { drawingChars, namedChars } from "./drawing.js";
 export { CrtFont, LineSet, ForegroundColour, BackgroundColour } from "./types.js";

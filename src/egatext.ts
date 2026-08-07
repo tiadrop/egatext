@@ -1,6 +1,6 @@
 import { Grid, GridBase } from "@xtia/grid";
-import { byte437ToWideChar, wideCharToByte437 } from "./cp437";
-import { BackgroundColour, CanvasContainer, CrtFont, ForegroundColour, LineSet } from "./types";
+import { byte437ToWideChar, wideCharToByte437 } from "./cp437.js";
+import { BackgroundColour, CanvasContainer, CrtFont, ForegroundColour, LineSet } from "./types.js";
 import { RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
@@ -21,7 +21,7 @@ type CRTOptions = {
 
 type Writable = string | number | Writable[];
 
-interface Pen {
+export interface Pen {
 	put(x: number, y: number, char: number | string): void;
 	drawBorder(style: LineSet): void;
 	write(x: number, y: number, ...text: Writable[]): void;

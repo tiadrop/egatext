@@ -1,5 +1,5 @@
 import { Pipe2D } from "@xtia/pipe2d";
-import { CrtFont } from "./types";
+import { CrtFont } from "./types.js";
 
 const isBlock = (charCode: number) => {
     // 192 to 223
