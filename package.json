@@ -1,7 +1,8 @@
 {
   "version": "0.0.1",
   "description": "High-level EGA textmode emulation",
-  "name": "egatext",
+  "repository": "https://github.com/tiadrop/egatext",
+  "name": "egatext-alpha",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -30,7 +31,9 @@
     "@xtia/grid": "^0.6.0",
     "@xtia/pipe2d": "^2.2.1",
     "@xtia/pipe2d-image": "^1.2.3",
-    "@xtia/rgba": "^1.5.2",
+    "@xtia/rgba": "^1.5.2"
+  },
+  "devDependencies": {
     "typescript": "^7.0.2"
   }
 }
