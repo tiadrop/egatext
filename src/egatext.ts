@@ -6,6 +6,8 @@ import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
 import { lineSets } from "./charsets.js";
 
+const transparent = new RGBA(0, 0, 0, 0);
+
 export type EGATextCell = {
 	fg: ForegroundColour;
 	bg: BackgroundColour;
@@ -119,13 +121,29 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}
 	}
 
+
+	toString(lineBreak: string = "\n") {
+		return this.grid.values.map(c => byte437ToWideChar(c.char))
+			.rows.map(row => row.join("")).join(lineBreak);
+	}
+
+	toHTML(colours: ArrayLike<RGBA | string> = egaPalette, lineBreak: string = "<br>") {
+		return this.grid.values.map(c => {
+			return `<span style="background-color: ${
+				colours[c.bg] ?? transparent
+			}; color: ${
+				colours[c.fg] ?? transparent
+			}">${byte437ToWideChar(c.char)}</span>`;
+		}).rows.map(row => row.join("")).join(lineBreak);
+	}
+
 	getRenderer(font: CrtFont, colours: ArrayLike<RGBA> = egaPalette) {
 		const cache = new Map<string, OffscreenCanvas>;
 		const tilePipe = this.grid.values.map((cell: EGATextCell) => {
 			const cacheKey = `${cell.char},${cell.fg},${cell.bg}`;
 			if (cache.has(cacheKey)) return cache.get(cacheKey)!;
-			const fgc = colours[cell.fg];
-			const bgc = colours[cell.bg];
+			const fgc = colours[cell.fg] ?? transparent;
+			const bgc = colours[cell.bg] ?? transparent;
 			const charPipe = font[cell.char]
 				.map(v => v === 0 ? bgc : v === 1 ? fgc : bgc.blend(fgc, v));
 			const tile = renderRGBAPipe(charPipe);
@@ -134,15 +152,17 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		});
 
 		const grid = this.grid;
+		const tileWidth = font[42].width;
+		const tileHeight = font[69].height;
 
-		function rendertoCanvas(target?: HTMLCanvasElement): HTMLCanvasElement
-		function rendertoCanvas<T extends CanvasContainer>(target?: T): T
-		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer) {
-			const tileWidth = font[42].width;
-			const tileHeight = font[42].height;
-			const width = tileWidth * grid.width;
-			const height = tileHeight * grid.height;
-			const canvas = new OffscreenCanvas(width, height);
+		function rendertoCanvas(): OffscreenCanvas
+		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target?: T): T
+		function rendertoCanvas(canvasSelector: string): HTMLCanvasElement
+		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer | string) {
+			const canvas = new OffscreenCanvas(
+				tileWidth * grid.width,
+				tileHeight * grid.height
+			);
 			const ctx = canvas.getContext("2d")!;
 			for (let y = 0; y < grid.height; y++) {
 				for (let x = 0; x < grid.width; x++) {
@@ -150,6 +170,11 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 				}
 			}
 			if (target) {
+				if (typeof target == "string") {
+					const element = document.body.querySelector(target);
+					if (!element || !(element instanceof HTMLCanvasElement)) throw new Error("Selector did not find a canvas element");
+					target = element;
+				}
 				const targetCanvas = target instanceof HTMLElement ? target : target.element;
 				targetCanvas.getContext("2d")!.drawImage(canvas, 0, 0, targetCanvas.width, targetCanvas.height);
 				return target;
@@ -157,18 +182,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			return canvas;
 		}
 
-		return {
-			toCanvas: rendertoCanvas,
-			toString: (lineBreak: string = "\n") => {
-				return this.grid.values.map(c => byte437ToWideChar(c.char))
-					.rows.map(row => row.join("")).join(lineBreak);
-			},
-			toHTML: () => {
-				return this.grid.values.map(c => {
-					return `<span style="background-color: ${colours[c.bg]}; color: ${colours[c.fg]}">${byte437ToWideChar(c.char)}</span>`;
-				}).rows.map(row => row.join("")).join("<br>");
-			}
-		};
+		return rendertoCanvas;
 
 	}
 }
