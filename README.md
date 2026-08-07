@@ -42,7 +42,8 @@ crt.write("Hello Pascal");
 ```ts
 // import .BMF fonts
 import { loadBmfFont } from "egatext-alpha";
-const font = await loadBmfFont("url/to.bmf");
+
+const font = await loadBmfFont("url/to.bmf" /* or u8a data */);
 const renderer = screen.getRenderer(font);
 
 // render to string
