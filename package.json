@@ -1,0 +1,36 @@
+{
+  "version": "0.0.1",
+  "description": "High-level EGA textmode emulation",
+  "name": "egatext",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./lib/*": null
+  },
+  "sideEffects": false,
+  "keywords": [
+    "grid",
+    "emulation",
+    "retro",
+    "terminal",
+    "codepage 437",
+    "dos",
+    "ega"
+  ],
+  "scripts": {
+    "build": "npx tsc"
+  },
+  "files": [
+    "lib/"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@xtia/grid": "^0.6.0",
+    "@xtia/pipe2d": "^2.2.1",
+    "@xtia/pipe2d-image": "^1.2.3",
+    "@xtia/rgba": "^1.5.2",
+    "typescript": "^7.0.2"
+  }
+}
