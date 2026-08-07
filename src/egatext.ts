@@ -4,6 +4,7 @@ import { BackgroundColour, CanvasContainer, CrtFont, ForegroundColour, LineSet }
 import { RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
+import { lineSets } from "./charsets.js";
 
 export type EGATextCell = {
 	fg: ForegroundColour;
@@ -21,10 +22,20 @@ type CRTOptions = {
 
 type Writable = string | number | Writable[];
 
+function getLineSet(styleOrHoriz: LineSet | 1 | 2, vert?: 1 | 2): LineSet {
+	if (vert) {
+		const horizSet = lineSets[vert == 1 ? "singleHoriz" : "doubleHoriz"];
+		return horizSet[styleOrHoriz == 1 ? "singleVert" : "doubleVert"];
+	}
+	return styleOrHoriz as LineSet;
+}
+
 export interface Pen {
 	put(x: number, y: number, char: number | string): void;
 	drawBorder(style: LineSet): void;
+	drawBorder(horizontalLines: 1 | 2, verticalLines: 1 | 2): void;
 	write(x: number, y: number, ...text: Writable[]): void;
+	fill(char: number | string): void;
 }
 
 type NonFunction = string | number | boolean | object | symbol | bigint | null | undefined;
@@ -81,7 +92,13 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		return {
 			put,
 			write,
-			drawBorder: (lineSet) => {
+			fill: (char) => {
+				const fg = resolveValue(foregroundColour);
+				const bg = resolveValue(backgroundColour);
+				this.grid.fill(mkCell(fg, bg, char));
+			},
+			drawBorder: (setOrHoriz, vert?: 1 | 2) => {
+				const lineSet = getLineSet(setOrHoriz, vert);
 				this.grid.batchUpdate(() => {
 					put(0, 0, resolveValue(lineSet.corners.topLeft));
 					for (let x = 1; x < this.width - 1; x++) {
@@ -211,7 +228,7 @@ export class CRT<T extends EGAText = EGAText> {
 			this._cursorY,
 			this.width,
 			this.height - this._cursorY
-		).scroll(0, -1, this.mkCell(" "));
+		).scroll(0, -1, this.mkCell(32));
 	}
 	insLine() {
 		this.screen.grid.region(
@@ -235,8 +252,11 @@ export class CRT<T extends EGAText = EGAText> {
 		return new CRT(this.screen.inset(margin));
 	}
 
-	drawBorder(style: LineSet) {
-		this.getPen().drawBorder(style);
+	drawBorder(lineSet: LineSet): void
+	drawBorder(horizontalLines: 1 | 2, verticalLines: 1 | 2): void
+	drawBorder(setOrHoriz: LineSet | 1 | 2, vert?: 1 | 2): void {
+		const set = getLineSet(setOrHoriz, vert);
+		this.getPen().drawBorder(set);
 	}
 	write(...s: (string | number)[]) {
 		const pen = this.getPen();

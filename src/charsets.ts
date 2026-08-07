@@ -1,6 +1,6 @@
 import { LineSet } from "./types.js";
 
-const blockChars = {
+export const blockChars = {
 	fg25: 176, // ░
 	fg50: 177, // ▒
 	fg75: 178, // ▓
@@ -12,8 +12,8 @@ const blockChars = {
 }
 
 export const lineSets = {
-	singleVert: {
-		singleHoriz: {
+	singleHoriz: {
+		singleVert: {
 			corners: {
 				topLeft: 218, // ┌
 				topRight: 191, // ┐
@@ -32,28 +32,7 @@ export const lineSets = {
 				right: 195, // ├
 			}
 		},
-		doubleHoriz: {
-			corners: {
-				topLeft: 213, // ╒
-				topRight: 184, // ╕
-				bottomLeft: 212, // ╘
-				bottomRight: 190, // ╛
-			},
-			straight: {
-				vert: 179, // │
-				horiz: 205, // ═
-			},
-			cross: 216, // ╪
-			junction: {
-				up: 207, // ╧
-				down: 209, // ╤
-				left: 181, // ╡
-				right: 198, // ╞
-			}
-		},
-	},
-	doubleVert: {
-		singleHoriz: {
+		doubleVert: {
 			corners: {
 				topLeft: 214, // ╓
 				topRight: 183, // ╖
@@ -72,7 +51,28 @@ export const lineSets = {
 				right: 199, // ╟
 			}
 		},
-		doubleHoriz: {
+	},
+	doubleHoriz: {
+		singleVert: {
+			corners: {
+				topLeft: 213, // ╒
+				topRight: 184, // ╕
+				bottomLeft: 212, // ╘
+				bottomRight: 190, // ╛
+			},
+			straight: {
+				vert: 179, // │
+				horiz: 205, // ═
+			},
+			cross: 216, // ╪
+			junction: {
+				up: 207, // ╧
+				down: 209, // ╤
+				left: 181, // ╡
+				right: 198, // ╞
+			}
+		},
+		doubleVert: {
 			corners: {
 				topLeft: 201, // ╔
 				topRight: 187, // ╗
@@ -98,12 +98,7 @@ export const lineSets = {
 	}
 }
 
-export const drawingChars = {
-	block: blockChars,
-	line: lineSets
-}
-
-export const accentedChars = {
+export const accentedLetters = {
 	a: {
 		circumflex: 131,
 		diaresis: 132,
@@ -112,7 +107,7 @@ export const accentedChars = {
 		acute: 160,
 	},
 	A: {
-		diareses: 142,
+		diaresis: 142,
 		right: 143,
 	},
 	c: {
@@ -124,7 +119,7 @@ export const accentedChars = {
 	e: {
 		acute: 130,
 		circumflex: 136,
-		diareses: 137,
+		diaresis: 137,
 		grave: 138,
 	},
 	E: {
@@ -144,7 +139,7 @@ export const accentedChars = {
 	},
 	o: {
 		circumflex: 147,
-		diareses: 148,
+		diaresis: 148,
 		grave: 149,
 		acute: 162,
 	},
