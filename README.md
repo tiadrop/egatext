@@ -57,8 +57,9 @@ document.body.innerHTML = screen.toHTML({
 
 // custom fonts - they're just arrays of Pipe2D<number>
 const bigFont = font.map(glyph => glyph.scale(1.5));
+const lightMap = imagePipe.map(px => px.lightness);
 const pngFont = Array.from(
 	{ length: 256 },
-	(_, i) => imagePipe.crop(i * 32, 0, 32, 32)
+	(_, i) => lightMap.crop(i * 32, 0, 32, 32)
 );
 ```
