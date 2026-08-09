@@ -11,10 +11,10 @@ const BLINK_RATE = 2.1666; //hz
 const black = new RGBA(0, 0, 0);
 
 export type EGATextCell = {
-	fg: ForegroundColour;
-	bg: BackgroundColour;
-	char: number;
-	blink?: boolean;
+	readonly fg: ForegroundColour;
+	readonly bg: BackgroundColour;
+	readonly char: number;
+	readonly blink?: boolean;
 }
 
 const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), blink});
