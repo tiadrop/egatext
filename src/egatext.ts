@@ -154,6 +154,40 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}
 	}
 
+	getBytes(x: number, y: number, width: number, height: number): EGAData {
+		const bytes = new Uint8ClampedArray(width * height * 2);
+		
+		this.grid.region(x, y, width, height)
+			.values
+			.toFlatArrayXY()
+			.forEach((cell, i) => {
+				const safeFg = cell.fg & 0x0F;
+				const safeBg = cell.bg & 0x07;
+				
+				let attr = (safeBg << 4) | safeFg;
+				if (cell.blink) {
+					attr |= 0x80;
+				}
+				
+				bytes.set([attr, cell.char], i * 2);
+			});
+		
+		return { width, height, data: bytes };
+	}
+
+	putBytes(source: EGAData): void
+	putBytes(source: EGAData, x?: number, y?: number): void
+	putBytes(source: EGAData, x: number = 0, y: number = 0) {
+		const pipe = Grid.wrapBytes(source).values.map(([attr, char]) => {
+			const fg = (attr & 0x0F) as ForegroundColour;
+			const bg = ((attr >> 4) & 0x07) as BackgroundColour;
+			const blink = (attr & 0x80) !== 0;
+			
+			return { bg, fg, char, blink };
+		});
+		
+		this.grid.paste(pipe, x, y);
+	}
 
 	toString(lineBreak: string = "\n") {
 		return this.grid.values.map(c => byte437ToWideChar(c.char))

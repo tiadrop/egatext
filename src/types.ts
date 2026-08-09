@@ -26,3 +26,9 @@ export type LineSet = {
 }
 
 export type CanvasContainer = {element: HTMLCanvasElement};
+
+export type EGAData = {
+	readonly width: number;
+	readonly height: number;
+	readonly data: Uint8ClampedArray;
+}
