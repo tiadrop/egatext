@@ -28,9 +28,16 @@ screen.grid
 	.writeMask(screen.grid.map(v => v.bg == 1))
 	.paste(someOtherScreen.grid, 10, 10);
 
+// draw a colour chart
+screen.grid.paste({
+	width: 16,
+	height: 8,
+	get: (x, y) => ({fg: x, bg: y, char: 254})
+}, 10, 4);
+
 // pen interface
 screen.pen(14, 0).write(0, 0, "Yellow text!");
-screen.pen(11, 0).write(0, 1, "Cyan text!");
+screen.pen(11, 0, true).write(0, 1, "Cyan blinking text!");
 
 // live region view
 const region = screen.liveRegion(0, 5, 80, 5); // EGAText instance (live)
@@ -38,6 +45,7 @@ region.pen(0, 7).drawBorder(1, 2); // single h, double v, ie ╓─╖
 
 // Pascal-like interface
 const crt = region.getCRT({ lockScroll: true });
+crt.foreground = 13;
 crt.write("Hello Pascallllll");
 crt.gotoXY(12, 0);
 crt.clrEol();
