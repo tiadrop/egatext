@@ -31,7 +31,7 @@ const blinkManager = (() => {
 	const start = () => {
 		intervalId = setInterval(() => {
 			state = !state;
-			entries.forEach(e => e.fn());
+			[...entries].forEach(e => e.fn());
 		}, 500/BLINK_RATE);
 	};
 	const stop = () => clearInterval(intervalId!);
@@ -296,9 +296,9 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			tileHeight * grid.height
 		);
 		const ctx = buffer.getContext("2d")!;
-		if (!ctx) throw new Error("Canvas does not support getContext()");
+		if (!ctx) throw new Error("Canvas does not support getContext(\"2d\")");
 
-		const renderState = Grid.solid<OffscreenCanvas | null>(this.width, this.height, null);
+		const bufferState = Grid.solid<OffscreenCanvas | null>(this.width, this.height, null);
 
 		function rendertoCanvas(): OffscreenCanvas
 		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target: T): T
@@ -320,14 +320,14 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			let requiresFlip = false;
 			for (let y = 0; y < grid.height; y++) {
 				for (let x = 0; x < grid.width; x++) {
-					const currentCell = renderState.get(x, y);
+					const currentCell = bufferState.get(x, y);
 					const displayCell = cellPipe.get(x, y);
 					const tile = getTile(displayCell);
 					if (currentCell !== tile) {
 						requiresFlip = true;
 						const tile = getTile(displayCell);
 						ctx.drawImage(tile, x * tileWidth, y * tileHeight);
-						renderState.set(x, y, tile);
+						bufferState.set(x, y, tile);
 					}
 				}
 			}
@@ -343,6 +343,11 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			canvas.getContext("2d")?.drawImage(buffer, 0, 0);
 			return canvas;
 		}
+
+		const ref = new WeakRef(rendertoCanvas);
+		const unregister = blinkManager.register(() => {
+			if (!ref.deref()) unregister();
+		});
 
 		return rendertoCanvas;
 
