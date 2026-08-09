@@ -98,10 +98,10 @@ type AutoRenderOptions = {
 	target: HTMLCanvasElement | CanvasContainer | string;
 	palette?: ArrayLike<RGBA | string>;
 	region?: {
-		x: number;
-		y: number;
-		width: number;
-		height: number;
+		readonly x: number;
+		readonly y: number;
+		readonly width: number;
+		readonly height: number;
 	}
 }
 
@@ -111,17 +111,17 @@ type HTMLOptions = {
 	blinkClass?: string;
 }
 
-function createScheduleFn<F extends (...args: any[]) => void>(fn: F): F {
-	let scheduled = false;
-	return ((...args: any[]) => {
-		if (scheduled) return;
-		scheduled = true;
-		requestAnimationFrame(() => {
-			scheduled = false;
-			fn(...args);
-		});
-	}) as F;
+function someIterator<T>(iterable: Iterable<T>, predicate: (value: T) => boolean): boolean {
+	for (const value of iterable) {
+		if (predicate(value)) return true;
+	}
+	return false;
 }
+
+function pointInRect(x: number, y: number, rect: {left: number, top: number, right: number, bottom: number}): boolean {
+	return x >= rect.left && y >= rect.top && x < rect.right && y < rect.bottom;
+}
+
 
 export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 
@@ -129,8 +129,9 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		const grid = Grid.solid(width, height, mkCell(7, 0, 32));
 		const screen = new EGAText<GridBase<EGATextCell>>(grid);
 		if (renderOptions) {
-			const region = renderOptions.region
-				? screen.liveRegion(renderOptions.region.x, renderOptions.region.y, renderOptions.region.width, renderOptions.region.height)
+			const renderRegion = renderOptions.region;
+			const region = renderRegion
+				? screen.liveRegion(renderRegion.x, renderRegion.y, renderRegion.width, renderRegion.height)
 				: screen;
 			const renderer = region.createRenderer(
 				renderOptions.font,
@@ -148,28 +149,37 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 
 			const canvasRef = new WeakRef(target instanceof HTMLCanvasElement ? target : target.element);
 
-			let needsRender = false;
+			let renderQueued = false;
 
-			const scheduleRender = createScheduleFn(() => {
-				const canvas = canvasRef.deref();
-				if (!canvas) {
-					unregisterBlink();
-					return;
-				}
-				if (needsRender) {
+			const scheduleRender = () => {
+				if (renderQueued) return;
+				renderQueued = true;
+				requestAnimationFrame(() => {
+					renderQueued = false;
+					const canvas = canvasRef.deref();
+					if (!canvas) {
+						unregisterBlink();
+						return;
+					}
 					renderer(canvas);
-					needsRender = false;
+				});
+			};
+
+			const unregisterBlink = blinkManager.register(scheduleRender);
+
+			const regionRect = renderRegion && {left: renderRegion.x, top: renderRegion.y, right: renderRegion.x + renderRegion.width, bottom: renderRegion.y + renderRegion.height};
+
+			screen.grid.on("change", (ev) => {
+				if (renderQueued) return;
+				if (
+					!regionRect
+					|| someIterator(
+						ev.changedCells.values(),
+						v => pointInRect(v.x, v.y, regionRect)
+					)
+				) {
+					scheduleRender();
 				}
-			});
-
-			const unregisterBlink = blinkManager.register(() => {
-				needsRender = true;
-				scheduleRender();
-			});
-
-			screen.grid.on("change", () => {
-				needsRender = true;
-				scheduleRender();
 			});
 		}
 		return screen;
