@@ -357,13 +357,14 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 export class CRT<T extends EGAText = EGAText> {
 	private pascalCoordinates: boolean;
 	private lockScroll: boolean;
-	private _currentFg: ForegroundColour;
-	private _currentBg: BackgroundColour;
 	private _cursorX: number = 0;
 	private _cursorY: number = 0;
 	readonly width: number;
 	readonly height: number;
+	foreground: ForegroundColour;
+	background: BackgroundColour;
 	blink: boolean = false;
+
 	constructor(
 		readonly screen: T,
 		options?: CRTOptions,
@@ -372,8 +373,8 @@ export class CRT<T extends EGAText = EGAText> {
 	) {
 		this.pascalCoordinates = !!options?.pascalCoordinates
 		this.lockScroll = !!options?.lockScroll;
-		this._currentBg = bg;
-		this._currentFg = fg;
+		this.background = bg;
+		this.foreground = fg;
 		this.width = screen.width;
 		this.height = screen.height;
 	}
@@ -382,17 +383,17 @@ export class CRT<T extends EGAText = EGAText> {
 	get cursorY() { return this.pascalCoordinates ? this._cursorY + 1 : this._cursorY; }
 
 	private mkCell(char: string | number) {
-		return mkCell(this._currentFg, this._currentBg, char, this.blink);
+		return mkCell(this.foreground, this.background, char, this.blink);
 	}
 	private getPen() {
-		return this.screen.pen(this._currentFg, this._currentBg, this.blink);
+		return this.screen.pen(this.foreground, this.background, this.blink);
 	}
 
 	gotoXY(x: number, y: number) {
 		[this._cursorX, this._cursorY] = this.pascalCoordinates ? [x - 1, y - 1] : [x, y];
 	}
 	clrScr() {
-		this.screen.grid.fill({char: 32, fg: this._currentFg, bg: this._currentBg});
+		this.screen.grid.fill({char: 32, fg: this.foreground, bg: this.background});
 	}
 	clrEol() {
 		this.screen.grid.liveRegion(
@@ -418,16 +419,16 @@ export class CRT<T extends EGAText = EGAText> {
 			this.height - this._cursorY
 		).scroll(0, 1, this.mkCell(32));
 	}
-	setForeground(v: ForegroundColour) { this._currentFg = v }
-	setBackground(v: BackgroundColour) { this._currentBg = v }
+
 	liveRegion(x: number, y: number, width: number, height: number, options: CRTOptions = {}) {
 		return new CRT(this.screen.liveRegion(x, y, width, height), {
 			pascalCoordinates: this.pascalCoordinates,
 			lockScroll: this.lockScroll,
 			...options
-		});
+		}, this.background, this.foreground);
 	}
-	inset(margin: number = 1) {
+
+	liveInset(margin: number = 1) {
 		return new CRT(this.screen.liveInset(margin));
 	}
 
