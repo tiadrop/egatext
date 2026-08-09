@@ -105,7 +105,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		const grid = Grid.solid(width, height, mkCell(7, 0, 32));
 		const screen = new EGAText<GridBase<EGATextCell>>(grid);
 		if (renderOptions) {
-			const renderer = screen.getRenderer(
+			const renderer = screen.createRenderer(
 				renderOptions.font,
 				renderOptions.palette && Array.from(renderOptions.palette)
 					.map(c => typeof c == "string" ? parseRGBA(c) : c)
@@ -159,7 +159,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	get width(){ return this.grid.width }
 	get height(){ return this.grid.height }
 
-	region(x: number, y: number, width: number, height: number) {
+	liveRegion(x: number, y: number, width: number, height: number) {
 		return new EGAText(this.grid.liveRegion(x, y, width, height));
 	}
 
@@ -167,7 +167,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		return new CRT(this, options);
 	}
 
-	inset(margin: number = 1) {
+	liveInset(margin: number = 1) {
 		if (!Number.isInteger(margin)) {
 			throw new Error(`Border size must be integer; got ${margin}`);
 		}
@@ -265,7 +265,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}).rows.map(row => row.join("")).join(lineBreak);
 	}
 
-	getRenderer(font: CrtFont, palette: ArrayLike<RGBA | string> = egaPalette) {
+	createRenderer(font: CrtFont, palette: ArrayLike<RGBA | string> = egaPalette) {
 		const cache = new Map<string, OffscreenCanvas>;
 		const rgbaPalette = Array.from(palette).map(v => typeof v == "string" ? parseRGBA(v) : v);
 
@@ -420,15 +420,15 @@ export class CRT<T extends EGAText = EGAText> {
 	}
 	setForeground(v: ForegroundColour) { this._currentFg = v }
 	setBackground(v: BackgroundColour) { this._currentBg = v }
-	region(x: number, y: number, width: number, height: number, options: CRTOptions = {}) {
-		return new CRT(this.screen.region(x, y, width, height), {
+	liveRegion(x: number, y: number, width: number, height: number, options: CRTOptions = {}) {
+		return new CRT(this.screen.liveRegion(x, y, width, height), {
 			pascalCoordinates: this.pascalCoordinates,
 			lockScroll: this.lockScroll,
 			...options
 		});
 	}
 	inset(margin: number = 1) {
-		return new CRT(this.screen.inset(margin));
+		return new CRT(this.screen.liveInset(margin));
 	}
 
 	drawBorder(lineSet: LineSet): void

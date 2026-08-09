@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "High-level EGA textmode emulation",
   "repository": "https://github.com/tiadrop/egatext",
   "name": "egatext-alpha",
