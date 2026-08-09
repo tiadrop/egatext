@@ -13,15 +13,15 @@ Emulates EGA text mode through a selection of live view interfaces:
 `npm install egatext-alpha`
 
 ```ts
-import { EGAText, vgaFont, lineSets } from "egatext-alpha";
+import { EGAText, vgaFont } from "egatext-alpha";
 
-const screen = EGAText.init(80, 25);
-
-const render = screen.getRenderer(vgaFont, /* palette */);
+const screen = EGAText.init(80, 25, {
+	target: "#my-canvas",
+	font: vgaFont,
+});
 
 // grid interface
 screen.grid.paste(someOtherScreen, 10, 10);
-screen.grid.on("change", () => render(myCanvas));
 
 // pen interface
 screen.pen(14, 0).write(0, 0, "Yellow text!");
@@ -29,12 +29,13 @@ screen.pen(11, 0).write(0, 1, "Cyan text!");
 
 // live region view
 const region = screen.region(0, 5, 80, 5); // EGAText instance (live)
-region.pen(0, 7).drawBorder(lineSets.singleHoriz.doubleVert);
+region.pen(0, 7).drawBorder(1, 2);
 
 // Pascal-like interface
 const crt = region.getCRT({ lockScroll: true });
-crt.gotoXY(3, 3);
-crt.write("Hello Pascal");
+crt.write("Hello Pascallllll");
+crt.gotoXY(12, 0);
+crt.clrEol();
 ```
 
 ## Tips

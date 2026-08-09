@@ -1,7 +1,7 @@
 import { Grid, GridBase } from "@xtia/grid";
 import { byte437ToWideChar, wideCharToByte437 } from "./cp437.js";
 import { BackgroundColour, CanvasContainer, CrtFont, ForegroundColour, LineSet } from "./types.js";
-import { RGBA } from "@xtia/rgba";
+import { parseRGBA, RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
 import { lineSets } from "./charsets.js";
@@ -19,7 +19,6 @@ const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | strin
 type CRTOptions = {
 	pascalCoordinates?: boolean;
 	lockScroll?: boolean;
-	drawLineBreaks?: boolean;
 }
 
 type Writable = string | number | Writable[];
@@ -45,10 +44,49 @@ const resolveValue = <T extends NonFunction>(source: T | (() => T)) => {
 	return typeof source == "function" ? source() : source;
 };
 
+type AutoRenderOptions = {
+	font: CrtFont;
+	target: HTMLCanvasElement | CanvasContainer | string;
+	palette?: ArrayLike<RGBA | string>;
+}
+
+function createScheduleFn<F extends (...args: any[]) => void>(fn: F): F {
+	let scheduled = false;
+	return ((...args: any[]) => {
+		if (scheduled) return;
+		scheduled = true;
+		requestAnimationFrame(() => {
+			scheduled = false;
+			fn(...args);
+		});
+	}) as F;
+}
+
 export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
-	static init(width: number, height: number) {
+
+	static init(width: number, height: number, renderOptions?: AutoRenderOptions): EGAText<GridBase<EGATextCell>> {
 		const grid = Grid.solid(width, height, mkCell(7, 0, 32));
-		return new EGAText<GridBase<EGATextCell>>(grid);
+		const screen = new EGAText<GridBase<EGATextCell>>(grid);
+		if (renderOptions) {
+			const renderer = screen.getRenderer(
+				renderOptions.font,
+				renderOptions.palette && Array.from(renderOptions.palette)
+					.map(c => typeof c == "string" ? parseRGBA(c) : c)
+			);
+
+			let canvas: HTMLCanvasElement | CanvasContainer;
+			if (typeof renderOptions.target == "string") {
+				canvas = document.getElementById(renderOptions.target) as HTMLCanvasElement;
+				if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+					throw new Error("Selector did not yield a valid render target");
+				}
+			} else canvas = renderOptions.target;
+
+			screen.grid.on("change", createScheduleFn(() => {
+				renderer(canvas)
+			}));
+		}
+		return screen;
 	}
 
 	static wrap<T extends Grid<EGATextCell>>(source: T) {
@@ -81,15 +119,10 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			const bg = resolveValue(backgroundColour);
 			this.grid.set(x, y, {bg, fg, char: typeof char == "string" ? wideCharToByte437(char) : char});
 		};
-		const write = (x: number, y: number, ..._text: Writable[]) => {
-			const writeNext = (v: Writable) => {
-				if (typeof v == "string") v = [...v].map(wideCharToByte437);
-				if (Array.isArray(v)) return v.forEach(writeNext);
-				if (x <= this.width) {
-					if (x < this.width) put(x++, y, v);
-				}
-			}
-			writeNext(_text);
+		const write = (x: number, y: number, ..._text: (string | number)[]) => {
+			[..._text.join("")].forEach(wc => {
+				if (x < this.width) put(x++, y, wc);
+			});
 		};
 		return {
 			put,
@@ -152,8 +185,9 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		});
 
 		const grid = this.grid;
-		const tileWidth = font[42].width;
-		const tileHeight = font[69].height;
+		const measureTile = font[1];
+		const tileWidth = measureTile.width;
+		const tileHeight = measureTile.height;
 
 		function rendertoCanvas(): OffscreenCanvas
 		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target?: T): T
@@ -172,7 +206,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			if (target) {
 				if (typeof target == "string") {
 					const element = document.body.querySelector(target);
-					if (!element || !(element instanceof HTMLCanvasElement)) throw new Error("Selector did not find a canvas element");
+					if (!element || !(element instanceof HTMLCanvasElement)) throw new Error("Selector did not yield a valid render target");
 					target = element;
 				}
 				const targetCanvas = target instanceof HTMLElement ? target : target.element;
@@ -190,7 +224,6 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 export class CRT<T extends EGAText = EGAText> {
 	private pascalCoordinates: boolean;
 	private lockScroll: boolean;
-	private drawLineBreaks: boolean;
 	private _currentFg: ForegroundColour;
 	private _currentBg: BackgroundColour;
 	private _cursorX: number = 0;
@@ -205,7 +238,6 @@ export class CRT<T extends EGAText = EGAText> {
 	) {
 		this.pascalCoordinates = !!options?.pascalCoordinates
 		this.lockScroll = !!options?.lockScroll;
-		this.drawLineBreaks = !!options?.drawLineBreaks;
 		this._currentBg = bg;
 		this._currentFg = fg;
 		this.width = screen.width;
@@ -250,7 +282,7 @@ export class CRT<T extends EGAText = EGAText> {
 			this._cursorY,
 			this.width,
 			this.height - this._cursorY
-		).scroll(0, 1, this.mkCell(" "));
+		).scroll(0, 1, this.mkCell(32));
 	}
 	setForeground(v: ForegroundColour) { this._currentFg = v }
 	setBackground(v: BackgroundColour) { this._currentBg = v }
@@ -258,7 +290,6 @@ export class CRT<T extends EGAText = EGAText> {
 		return new CRT(this.screen.region(x, y, width, height), {
 			pascalCoordinates: this.pascalCoordinates,
 			lockScroll: this.lockScroll,
-			drawLineBreaks: this.drawLineBreaks,
 			...options
 		});
 	}
@@ -276,18 +307,13 @@ export class CRT<T extends EGAText = EGAText> {
 		const pen = this.getPen();
 		this.screen.grid.batchUpdate(() => {
 			[...s.join("")].forEach(char => {
-				if (!this.drawLineBreaks && char == "\n") {
-					this._cursorY++;
+				pen.put(this._cursorX++, this._cursorY, char);
+				if (this._cursorX == this.width) {
 					this._cursorX = 0;
-				} else {
-					pen.put(this._cursorX++, this._cursorY, char);
-					if (this._cursorX == this.width) {
-						this._cursorX = 0;
-						this._cursorY++;
-					}
+					this._cursorY++;
 				}
 				if (this._cursorY == this.height) {
-					if (!this.lockScroll) this.screen.grid.scroll(0, -1, this.mkCell(" "));
+					if (!this.lockScroll) this.screen.grid.scroll(0, -1, this.mkCell(32));
 					this._cursorY--;
 				}
 			});
