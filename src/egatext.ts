@@ -1,25 +1,56 @@
 import { Grid, GridBase } from "@xtia/grid";
 import { byte437ToWideChar, wideCharToByte437 } from "./cp437.js";
-import { BackgroundColour, CanvasContainer, CrtFont, ForegroundColour, LineSet } from "./types.js";
+import { BackgroundColour, CanvasContainer, CrtFont, EGAData, ForegroundColour, LineSet } from "./types.js";
 import { parseRGBA, RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
 import { lineSets } from "./charsets.js";
 
-const transparent = new RGBA(0, 0, 0, 0);
+const BLINK_RATE = 2.1666; //hz
+
+const black = new RGBA(0, 0, 0);
 
 export type EGATextCell = {
 	fg: ForegroundColour;
 	bg: BackgroundColour;
 	char: number;
+	blink?: boolean;
 }
 
-const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string) => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char)});
+const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), blink});
 
 type CRTOptions = {
 	pascalCoordinates?: boolean;
 	lockScroll?: boolean;
 }
+
+const blinkManager = (() => {
+	const entries: {fn: () => void}[] = [];
+	let state = false;
+	let intervalId: ReturnType<typeof setInterval> | null = null;
+	const start = () => {
+		intervalId = setInterval(() => {
+			state = !state;
+			entries.forEach(e => e.fn());
+		}, 500/BLINK_RATE);
+	};
+	const stop = () => clearInterval(intervalId!);
+
+	return {
+		register(fn: () => void): () => void {
+			const unique = {fn};
+			entries.push(unique);
+			if (entries.length == 1) start();
+
+			return () => {
+				const idx = entries.indexOf(unique);
+				entries.splice(idx, 1);
+				if (entries.length == 0) stop();
+			}
+		},
+		get state() { return state }
+	}
+})();
 
 type Writable = string | number | Writable[];
 
@@ -50,6 +81,12 @@ type AutoRenderOptions = {
 	palette?: ArrayLike<RGBA | string>;
 }
 
+type HTMLOptions = {
+	palette?: ArrayLike<RGBA | string>;
+	lineBreak?: string;
+	blinkClass?: string;
+}
+
 function createScheduleFn<F extends (...args: any[]) => void>(fn: F): F {
 	let scheduled = false;
 	return ((...args: any[]) => {
@@ -74,17 +111,39 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 					.map(c => typeof c == "string" ? parseRGBA(c) : c)
 			);
 
-			let canvas: HTMLCanvasElement | CanvasContainer;
+			let target: HTMLCanvasElement | CanvasContainer;
 			if (typeof renderOptions.target == "string") {
-				canvas = document.getElementById(renderOptions.target) as HTMLCanvasElement;
-				if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+				target = document.getElementById(renderOptions.target) as HTMLCanvasElement;
+				if (!target || !(target instanceof HTMLCanvasElement)) {
 					throw new Error("Selector did not yield a valid render target");
 				}
-			} else canvas = renderOptions.target;
+			} else target = renderOptions.target;
 
-			screen.grid.on("change", createScheduleFn(() => {
-				renderer(canvas)
-			}));
+			const canvasRef = new WeakRef(target instanceof HTMLCanvasElement ? target : target.element);
+
+			let needsRender = false;
+
+			const scheduleRender = createScheduleFn(() => {
+				const canvas = canvasRef.deref();
+				if (!canvas) {
+					unregisterBlink();
+					return;
+				}
+				if (needsRender) {
+					renderer(canvas);
+					needsRender = false;
+				}
+			});
+
+			const unregisterBlink = blinkManager.register(() => {
+				needsRender = true;
+				scheduleRender();
+			});
+
+			screen.grid.on("change", () => {
+				needsRender = true;
+				scheduleRender();
+			});
 		}
 		return screen;
 	}
@@ -93,7 +152,9 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		return new EGAText(source);
 	}
 
-	protected constructor(readonly grid: G) {}
+	protected constructor(
+		readonly grid: G
+	) {}
 
 	get width(){ return this.grid.width }
 	get height(){ return this.grid.height }
@@ -113,11 +174,11 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		return new EGAText(this.grid.region({top: margin, left: margin, right: margin, bottom: margin}));
 	}
 
-	pen(foregroundColour: ForegroundColour | (() => ForegroundColour), backgroundColour: BackgroundColour | (() => BackgroundColour)): Pen {
+	pen(foregroundColour: ForegroundColour | (() => ForegroundColour), backgroundColour: BackgroundColour | (() => BackgroundColour), blink?: boolean): Pen {
 		const put = (x: number, y: number, char: number | string) => {
 			const fg = resolveValue(foregroundColour);
 			const bg = resolveValue(backgroundColour);
-			this.grid.set(x, y, {bg, fg, char: typeof char == "string" ? wideCharToByte437(char) : char});
+			this.grid.set(x, y, {bg, fg, char: typeof char == "string" ? wideCharToByte437(char) : char, blink});
 		};
 		const write = (x: number, y: number, ..._text: (string | number)[]) => {
 			[..._text.join("")].forEach(wc => {
@@ -190,63 +251,97 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	}
 
 	toString(lineBreak: string = "\n") {
-		return this.grid.values.map(c => byte437ToWideChar(c.char))
+		const blinking = blinkManager.state;
+		return this.grid.values.map(c => blinking && c.blink ? " " : byte437ToWideChar(c.char))
 			.rows.map(row => row.join("")).join(lineBreak);
 	}
 
-	toHTML(colours: ArrayLike<RGBA | string> = egaPalette, lineBreak: string = "<br>") {
+	toHTML({palette = egaPalette, lineBreak = "<br>", blinkClass = "ega_blink"}: HTMLOptions) {
 		return this.grid.values.map(c => {
-			return `<span style="background-color: ${
-				colours[c.bg] ?? transparent
+			return `<span${blinkClass} style="background-color: ${
+				palette[c.bg] ?? palette[0] ?? black
 			}; color: ${
-				colours[c.fg] ?? transparent
+				palette[c.fg] ?? palette[0] ?? black
 			}">${byte437ToWideChar(c.char)}</span>`;
 		}).rows.map(row => row.join("")).join(lineBreak);
 	}
 
-	getRenderer(font: CrtFont, colours: ArrayLike<RGBA> = egaPalette) {
+	getRenderer(font: CrtFont, palette: ArrayLike<RGBA | string> = egaPalette) {
 		const cache = new Map<string, OffscreenCanvas>;
-		const tilePipe = this.grid.values.map((cell: EGATextCell) => {
-			const cacheKey = `${cell.char},${cell.fg},${cell.bg}`;
+		const rgbaPalette = Array.from(palette).map(v => typeof v == "string" ? parseRGBA(v) : v);
+
+		const getTile = (cell: EGATextCell) => {
+			// where fg=bg we can share a cache entry
+			const char = cell.fg == cell.bg ? 32 : cell.char;
+			const cacheKey = `${char},${cell.fg},${cell.bg}`;
 			if (cache.has(cacheKey)) return cache.get(cacheKey)!;
-			const fgc = colours[cell.fg] ?? transparent;
-			const bgc = colours[cell.bg] ?? transparent;
-			const charPipe = font[cell.char]
+			const fgc = rgbaPalette[cell.fg] ?? rgbaPalette[0] ?? black;
+			const bgc = rgbaPalette[cell.bg] ?? rgbaPalette[0] ?? black;
+			const charPipe = font[char]
 				.map(v => v === 0 ? bgc : v === 1 ? fgc : bgc.blend(fgc, v));
 			const tile = renderRGBAPipe(charPipe);
 			cache.set(cacheKey, tile);
 			return tile;
+		};
+
+		const blinkPipe = this.grid.values.map(cell => {
+			return cell.blink ? {fg: cell.bg, bg: cell.bg, char: 32} : cell;
 		});
 
 		const grid = this.grid;
 		const measureTile = font[1];
 		const tileWidth = measureTile.width;
 		const tileHeight = measureTile.height;
+		const buffer = new OffscreenCanvas(
+			tileWidth * grid.width,
+			tileHeight * grid.height
+		);
+		const ctx = buffer.getContext("2d")!;
+		if (!ctx) throw new Error("Canvas does not support getContext()");
+
+		const renderState = Grid.solid<OffscreenCanvas | null>(this.width, this.height, null);
 
 		function rendertoCanvas(): OffscreenCanvas
-		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target?: T): T
+		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target: T): T
 		function rendertoCanvas(canvasSelector: string): HTMLCanvasElement
 		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer | string) {
-			const canvas = new OffscreenCanvas(
-				tileWidth * grid.width,
-				tileHeight * grid.height
-			);
-			const ctx = canvas.getContext("2d")!;
+			let targetCanvas: HTMLCanvasElement | undefined;
+			if (typeof target == "string") {
+				const el = document.querySelector(target);
+				if (!(el instanceof HTMLCanvasElement)) {
+					throw new Error("Selector did not yield a valid render target");
+				}
+				targetCanvas = el;
+			} else if (target !== undefined) {
+				targetCanvas = target instanceof HTMLCanvasElement
+					? target
+					: target.element
+			}
+			const cellPipe = blinkManager.state ? blinkPipe : grid.values;
+			let requiresFlip = false;
 			for (let y = 0; y < grid.height; y++) {
 				for (let x = 0; x < grid.width; x++) {
-					ctx.drawImage(tilePipe.get(x, y), x * tileWidth, y * tileHeight);
+					const currentCell = renderState.get(x, y);
+					const displayCell = cellPipe.get(x, y);
+					const tile = getTile(displayCell);
+					if (currentCell !== tile) {
+						requiresFlip = true;
+						const tile = getTile(displayCell);
+						ctx.drawImage(tile, x * tileWidth, y * tileHeight);
+						renderState.set(x, y, tile);
+					}
 				}
 			}
-			if (target) {
-				if (typeof target == "string") {
-					const element = document.body.querySelector(target);
-					if (!element || !(element instanceof HTMLCanvasElement)) throw new Error("Selector did not yield a valid render target");
-					target = element;
+			if (targetCanvas) {
+				if (requiresFlip) {
+					targetCanvas.getContext("2d")!.drawImage(buffer, 0, 0, targetCanvas.width, targetCanvas.height);
 				}
-				const targetCanvas = target instanceof HTMLElement ? target : target.element;
-				targetCanvas.getContext("2d")!.drawImage(canvas, 0, 0, targetCanvas.width, targetCanvas.height);
 				return target;
 			}
+
+			// copy to a fresh OffscreenCanvas
+			const canvas = new OffscreenCanvas(buffer.width, buffer.height);
+			canvas.getContext("2d")?.drawImage(buffer, 0, 0);
 			return canvas;
 		}
 
@@ -264,6 +359,7 @@ export class CRT<T extends EGAText = EGAText> {
 	private _cursorY: number = 0;
 	readonly width: number;
 	readonly height: number;
+	blink: boolean = false;
 	constructor(
 		readonly screen: T,
 		options?: CRTOptions,
@@ -282,10 +378,10 @@ export class CRT<T extends EGAText = EGAText> {
 	get cursorY() { return this.pascalCoordinates ? this._cursorY + 1 : this._cursorY; }
 
 	private mkCell(char: string | number) {
-		return mkCell(this._currentFg, this._currentBg, char);
+		return mkCell(this._currentFg, this._currentBg, char, this.blink);
 	}
 	private getPen() {
-		return this.screen.pen(this._currentFg, this._currentBg);
+		return this.screen.pen(this._currentFg, this._currentBg, this.blink);
 	}
 
 	gotoXY(x: number, y: number) {

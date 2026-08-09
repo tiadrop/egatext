@@ -16,12 +16,12 @@ Emulates EGA text mode through a selection of live view interfaces:
 import { EGAText, vgaFont } from "egatext-alpha";
 
 const screen = EGAText.init(80, 25, {
-	target: "#my-canvas",
+	target: "#my-canvas", // or canvasElement,
 	font: vgaFont,
 });
 
 // grid interface
-screen.grid.paste(someOtherScreen, 10, 10);
+screen.grid.paste(someOtherScreen.grid, 10, 10);
 
 // pen interface
 screen.pen(14, 0).write(0, 0, "Yellow text!");
@@ -29,7 +29,7 @@ screen.pen(11, 0).write(0, 1, "Cyan text!");
 
 // live region view
 const region = screen.region(0, 5, 80, 5); // EGAText instance (live)
-region.pen(0, 7).drawBorder(1, 2);
+region.pen(0, 7).drawBorder(1, 2); // single h, double v, ie ╓─╖
 
 // Pascal-like interface
 const crt = region.getCRT({ lockScroll: true });
@@ -44,10 +44,14 @@ crt.clrEol();
 // import .BMF fonts
 import { loadBmfFont } from "egatext-alpha";
 
-const font = await loadBmfFont("url/to.bmf" /* or u8a data */);
+const font = await loadBmfFont("url/to.bmf");
+// or font = loadBmfFont(u8aData);
 const renderer = screen.getRenderer(font);
 
 // render to string
 screen.grid.on("change", () => console.log(screen.toString()));
 // or to HTML
-document.body.innerHTML = screen.toHTML(/* palette */);
+document.body.innerHTML = screen.toHTML({
+	blinkClass: "flashing"
+});
+```
