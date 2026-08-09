@@ -8,6 +8,8 @@ Emulates EGA text mode through a selection of live view interfaces:
 * Modern: write with `Pen` objects, render to canvas, string or HTML
 * Pascal/CRT: independent contexts with an API based on Pascal's CRT unit
 
+See it in use: [☻ The Game With No Name](https://www.aleta.codes/#projects/noname)
+
 ## General use
 
 `npm install egatext-alpha`
