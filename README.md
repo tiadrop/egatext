@@ -21,7 +21,9 @@ const screen = EGAText.init(80, 25, {
 });
 
 // grid interface
-screen.grid.paste(someOtherScreen.grid, 10, 10);
+screen.grid
+	.writeMask(screen.grid.map(v => v.bg == 1))
+	.paste(someOtherScreen.grid, 10, 10);
 
 // pen interface
 screen.pen(14, 0).write(0, 0, "Yellow text!");

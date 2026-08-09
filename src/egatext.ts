@@ -160,7 +160,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	get height(){ return this.grid.height }
 
 	region(x: number, y: number, width: number, height: number) {
-		return new EGAText(this.grid.region(x, y, width, height));
+		return new EGAText(this.grid.liveRegion(x, y, width, height));
 	}
 
 	getCRT(options?: CRTOptions) {
@@ -171,7 +171,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		if (!Number.isInteger(margin)) {
 			throw new Error(`Border size must be integer; got ${margin}`);
 		}
-		return new EGAText(this.grid.region({top: margin, left: margin, right: margin, bottom: margin}));
+		return new EGAText(this.grid.liveRegion({top: margin, left: margin, right: margin, bottom: margin}));
 	}
 
 	pen(foregroundColour: ForegroundColour | (() => ForegroundColour), backgroundColour: BackgroundColour | (() => BackgroundColour), blink?: boolean): Pen {
@@ -218,8 +218,8 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	getBytes(x: number, y: number, width: number, height: number): EGAData {
 		const bytes = new Uint8ClampedArray(width * height * 2);
 		
-		this.grid.region(x, y, width, height)
-			.values
+		this.grid.liveRegion(x, y, width, height)
+			.valuePipe
 			.toFlatArrayXY()
 			.forEach((cell, i) => {
 				const safeFg = cell.fg & 0x0F;
@@ -239,7 +239,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	putBytes(source: EGAData): void
 	putBytes(source: EGAData, x?: number, y?: number): void
 	putBytes(source: EGAData, x: number = 0, y: number = 0) {
-		const pipe = Grid.wrapBytes(source).values.map(([attr, char]) => {
+		const pipe = Grid.wrapBytes(source).valuePipe.map(([attr, char]) => {
 			const fg = (attr & 0x0F) as ForegroundColour;
 			const bg = ((attr >> 4) & 0x07) as BackgroundColour;
 			const blink = (attr & 0x80) !== 0;
@@ -251,12 +251,12 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	}
 
 	toString(lineBreak: string = "\n", blinking?: boolean) {
-		return this.grid.values.map(c => blinking && c.blink ? " " : byte437ToWideChar(c.char))
+		return this.grid.valuePipe.map(c => blinking && c.blink ? " " : byte437ToWideChar(c.char))
 			.rows.map(row => row.join("")).join(lineBreak);
 	}
 
 	toHTML({palette = egaPalette, lineBreak = "<br>", blinkClass = "ega_blink"}: HTMLOptions) {
-		return this.grid.values.map(c => {
+		return this.grid.valuePipe.map(c => {
 			return `<span${blinkClass} style="background-color: ${
 				palette[c.bg] ?? palette[0] ?? black
 			}; color: ${
@@ -283,7 +283,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			return tile;
 		};
 
-		const blinkPipe = this.grid.values.map(cell => {
+		const blinkPipe = this.grid.valuePipe.map(cell => {
 			return cell.blink ? {fg: cell.bg, bg: cell.bg, char: 32} : cell;
 		});
 
@@ -316,7 +316,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 					? target
 					: target.element
 			}
-			const cellPipe = blinkManager.state ? blinkPipe : grid.values;
+			const cellPipe = blinkManager.state ? blinkPipe : grid.valuePipe;
 			let requiresFlip = false;
 			for (let y = 0; y < grid.height; y++) {
 				for (let x = 0; x < grid.width; x++) {
@@ -395,7 +395,7 @@ export class CRT<T extends EGAText = EGAText> {
 		this.screen.grid.fill({char: 32, fg: this._currentFg, bg: this._currentBg});
 	}
 	clrEol() {
-		this.screen.grid.region(
+		this.screen.grid.liveRegion(
 			this._cursorX,
 			this._cursorY,
 			this.width - this._cursorX,
@@ -403,7 +403,7 @@ export class CRT<T extends EGAText = EGAText> {
 		).fill(this.mkCell(32));
 	}
 	delLine() {
-		this.screen.grid.region(
+		this.screen.grid.liveRegion(
 			0,
 			this._cursorY,
 			this.width,
@@ -411,7 +411,7 @@ export class CRT<T extends EGAText = EGAText> {
 		).scroll(0, -1, this.mkCell(32));
 	}
 	insLine() {
-		this.screen.grid.region(
+		this.screen.grid.liveRegion(
 			0,
 			this._cursorY,
 			this.width,
