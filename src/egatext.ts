@@ -17,7 +17,25 @@ export type EGATextCell = {
 	readonly blink?: boolean;
 }
 
-const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), blink});
+const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), ...(blink?{blink}:{})});
+
+const attrToByte = (fg: ForegroundColour, bg: BackgroundColour, blink: boolean = false) => {
+	const safeFg = fg & 0x0F;
+	const safeBg = bg & 0x07;
+	
+	let attr = (safeBg << 4) | safeFg;
+	if (blink) {
+		attr |= 0x80;
+	}
+	return attr;
+}
+
+const byteToAttr = (byte: number) => {
+	const fg = (byte & 0x0F) as ForegroundColour;
+	const bg = ((byte >> 4) & 0x07) as BackgroundColour;
+	const blink = (byte & 0x80) !== 0;
+	return {fg, bg, blink};
+}
 
 type CRTOptions = {
 	pascalCoordinates?: boolean;
@@ -79,6 +97,12 @@ type AutoRenderOptions = {
 	font: CrtFont;
 	target: HTMLCanvasElement | CanvasContainer | string;
 	palette?: ArrayLike<RGBA | string>;
+	region?: {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	}
 }
 
 type HTMLOptions = {
@@ -105,7 +129,10 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		const grid = Grid.solid(width, height, mkCell(7, 0, 32));
 		const screen = new EGAText<GridBase<EGATextCell>>(grid);
 		if (renderOptions) {
-			const renderer = screen.createRenderer(
+			const region = renderOptions.region
+				? screen.liveRegion(renderOptions.region.x, renderOptions.region.y, renderOptions.region.width, renderOptions.region.height)
+				: screen;
+			const renderer = region.createRenderer(
 				renderOptions.font,
 				renderOptions.palette && Array.from(renderOptions.palette)
 					.map(c => typeof c == "string" ? parseRGBA(c) : c)
@@ -175,10 +202,11 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	}
 
 	pen(foregroundColour: ForegroundColour | (() => ForegroundColour), backgroundColour: BackgroundColour | (() => BackgroundColour), blink?: boolean): Pen {
+		const makePenCell = (char: string | number) => mkCell(resolveValue(foregroundColour), resolveValue(backgroundColour), char, blink);
 		const put = (x: number, y: number, char: number | string) => {
 			const fg = resolveValue(foregroundColour);
 			const bg = resolveValue(backgroundColour);
-			this.grid.set(x, y, {bg, fg, char: typeof char == "string" ? wideCharToByte437(char) : char, blink});
+			this.grid.set(x, y, mkCell(fg, bg, char, blink));
 		};
 		const write = (x: number, y: number, ..._text: (string | number)[]) => {
 			[..._text.join("")].forEach(wc => {
@@ -191,7 +219,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			fill: (char) => {
 				const fg = resolveValue(foregroundColour);
 				const bg = resolveValue(backgroundColour);
-				this.grid.fill(mkCell(fg, bg, char));
+				this.grid.fill(mkCell(fg, bg, char, blink));
 			},
 			drawBorder: (setOrHoriz, vert?: 1 | 2) => {
 				const lineSet = getLineSet(setOrHoriz, vert);
@@ -222,14 +250,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			.valuePipe
 			.toFlatArrayXY()
 			.forEach((cell, i) => {
-				const safeFg = cell.fg & 0x0F;
-				const safeBg = cell.bg & 0x07;
-				
-				let attr = (safeBg << 4) | safeFg;
-				if (cell.blink) {
-					attr |= 0x80;
-				}
-				
+				const attr = attrToByte(cell.fg, cell.bg, cell.blink);
 				bytes.set([attr, cell.char], i * 2);
 			});
 		
@@ -239,15 +260,33 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	putBytes(source: EGAData): void
 	putBytes(source: EGAData, x?: number, y?: number): void
 	putBytes(source: EGAData, x: number = 0, y: number = 0) {
-		const pipe = Grid.wrapBytes(source).valuePipe.map(([attr, char]) => {
-			const fg = (attr & 0x0F) as ForegroundColour;
-			const bg = ((attr >> 4) & 0x07) as BackgroundColour;
-			const blink = (attr & 0x80) !== 0;
-			
-			return { bg, fg, char, blink };
+		const pipe = Grid.wrapBytes(source).valuePipe.map(([attrByte, char]) => {
+			const { bg, fg, blink } = byteToAttr(attrByte);
+			return mkCell(fg, bg, char, blink);
 		});
 		
 		this.grid.paste(pipe, x, y);
+	}
+
+	/**
+	 * Creates a live EGAText view of an existing byte sequence in EGA standard encoding
+	 * 
+	 * Writing to the EGAText, or its underlying Grid, directly modifies the byte data, and
+	 * changes to the byte data affect subsequent reads of the EGAText.
+	 * @param byteData Object specifying width, height and data
+	 * @returns Live EGAText view
+	 */
+	static wrapBytes(byteData: EGAData) {
+		if (byteData.data.length !== byteData.width * byteData.height * 2) {
+			throw new Error(`Byte length mismatch (expected width x height x 2 (${byteData.width * byteData.height}) bytes, got ${byteData.data.length})`);
+		}
+		return new EGAText(Grid.wrapBytes(byteData).liveMap(
+			(pair) => {
+				const {bg, fg, blink} = byteToAttr(pair[0]);
+				return mkCell(fg, bg, pair[1], blink);
+			},
+			(cell) => new Uint8ClampedArray([attrToByte(cell.fg, cell.bg, cell.blink), cell.char])
+		));
 	}
 
 	toString(lineBreak: string = "\n", blinking?: boolean) {
