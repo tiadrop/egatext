@@ -250,8 +250,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		this.grid.paste(pipe, x, y);
 	}
 
-	toString(lineBreak: string = "\n") {
-		const blinking = blinkManager.state;
+	toString(lineBreak: string = "\n", blinking?: boolean) {
 		return this.grid.values.map(c => blinking && c.blink ? " " : byte437ToWideChar(c.char))
 			.rows.map(row => row.join("")).join(lineBreak);
 	}
