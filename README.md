@@ -20,6 +20,9 @@ const screen = EGAText.init(80, 25, {
 	font: vgaFont,
 });
 
+// or headless
+const headlessScreen = EGAText.init(80, 5);
+
 // grid interface
 screen.grid
 	.writeMask(screen.grid.map(v => v.bg == 1))
@@ -30,7 +33,7 @@ screen.pen(14, 0).write(0, 0, "Yellow text!");
 screen.pen(11, 0).write(0, 1, "Cyan text!");
 
 // live region view
-const region = screen.region(0, 5, 80, 5); // EGAText instance (live)
+const region = screen.liveRegion(0, 5, 80, 5); // EGAText instance (live)
 region.pen(0, 7).drawBorder(1, 2); // single h, double v, ie ╓─╖
 
 // Pascal-like interface
@@ -48,14 +51,7 @@ import { loadBmfFont } from "egatext-alpha";
 
 const font = await loadBmfFont("url/to.bmf");
 // or font = loadBmfFont(u8aData);
-const renderer = screen.getRenderer(font);
-
-// render to string
-screen.grid.on("change", () => console.log(screen.toString()));
-// or to HTML
-document.body.innerHTML = screen.toHTML({
-	blinkClass: "flashing"
-});
+const render = screen.createRenderer(font);
 
 // custom fonts - they're just arrays of Pipe2D<number>
 const bigFont = font.map(glyph => glyph.scale(1.5));
@@ -64,4 +60,12 @@ const pngFont = Array.from(
 	{ length: 256 },
 	(_, i) => lightMap.crop(i * 32, 0, 32, 32)
 );
+
+// render to string
+console.log(screen.toString());
+// or to HTML
+document.body.innerHTML = screen.toHTML({
+	blinkClass: "flashing"
+});
+
 ```
