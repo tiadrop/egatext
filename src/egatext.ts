@@ -19,22 +19,24 @@ export type EGATextCell = {
 
 const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), ...(blink?{blink}:{})});
 
-const attrToByte = (fg: ForegroundColour, bg: BackgroundColour, blink: boolean = false) => {
-	const safeFg = fg & 0x0F;
-	const safeBg = bg & 0x07;
+const cellToBytes = (cell: EGATextCell) => {
+	const safeFg = cell.fg & 0x0F;
+	const safeBg = cell.bg & 0x07;
 	
 	let attr = (safeBg << 4) | safeFg;
-	if (blink) {
+	if (cell.blink) {
 		attr |= 0x80;
 	}
-	return attr;
+
+	return new Uint8ClampedArray([attr, cell.char]);
 }
 
-const byteToAttr = (byte: number) => {
-	const fg = (byte & 0x0F) as ForegroundColour;
-	const bg = ((byte >> 4) & 0x07) as BackgroundColour;
-	const blink = (byte & 0x80) !== 0;
-	return {fg, bg, blink};
+const bytesToCell = (bytes: Uint8ClampedArray): EGATextCell => {
+	const [attr, char] = bytes;
+	const fg = (attr & 0x0F) as ForegroundColour;
+	const bg = ((attr >> 4) & 0x07) as BackgroundColour;
+	const blink = (attr & 0x80) !== 0;
+	return {fg, bg, blink, char};
 }
 
 type CRTOptions = {
@@ -196,10 +198,24 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	get width(){ return this.grid.width }
 	get height(){ return this.grid.height }
 
+	/**
+	 * Defines a live rectangular subregion.
+	 * @param x 
+	 * @param y 
+	 * @param width 
+	 * @param height 
+	 * @param options 
+	 * @returns A live view of a subregion of this screen
+	 */
 	liveRegion(x: number, y: number, width: number, height: number) {
 		return new EGAText(this.grid.liveRegion(x, y, width, height));
 	}
 
+	/**
+	 * Creates a Pascal CRT-style view of this screen view.
+	 * @param options 
+	 * @returns 
+	 */
 	getCRT(options?: CRTOptions) {
 		return new CRT(this, options);
 	}
@@ -211,6 +227,13 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		return new EGAText(this.grid.liveRegion({top: margin, left: margin, right: margin, bottom: margin}));
 	}
 
+	/**
+	 * Creates a drawing context with specified foreground, background and blink attributes.
+	 * @param foregroundColour 
+	 * @param backgroundColour 
+	 * @param blink 
+	 * @returns A Pen drawing context
+	 */
 	pen(foregroundColour: ForegroundColour | (() => ForegroundColour), backgroundColour: BackgroundColour | (() => BackgroundColour), blink?: boolean): Pen {
 		const makePenCell = (char: string | number) => mkCell(resolveValue(foregroundColour), resolveValue(backgroundColour), char, blink);
 		const put = (x: number, y: number, char: number | string) => {
@@ -253,35 +276,37 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}
 	}
 
-	getBytes(x: number, y: number, width: number, height: number): EGAData {
-		const bytes = new Uint8ClampedArray(width * height * 2);
+	/**
+	 * Exports the contents of this view as an EGA-encoded byte sequence.
+	 * @returns EGAData object specifying width, height and byte data
+	 */
+	getBytes(): EGAData {
+		const bytes = new Uint8ClampedArray(this.width * this.height * 2);
 		
-		this.grid.liveRegion(x, y, width, height)
-			.valuePipe
+		this.grid.valuePipe
 			.toFlatArrayXY()
 			.forEach((cell, i) => {
-				const attr = attrToByte(cell.fg, cell.bg, cell.blink);
-				bytes.set([attr, cell.char], i * 2);
+				bytes.set(cellToBytes(cell), i * 2);
 			});
 		
-		return { width, height, data: bytes };
+		return { width: this.width, height: this.height, data: bytes };
 	}
 
+	/**
+	 * Draws character and attributes from an EGA-encoded byte sequence.
+	 * @param source EGAData object specifying width, height and byte data
+	 */
 	putBytes(source: EGAData): void
 	putBytes(source: EGAData, x?: number, y?: number): void
 	putBytes(source: EGAData, x: number = 0, y: number = 0) {
-		const pipe = Grid.wrapBytes(source).valuePipe.map(([attrByte, char]) => {
-			const { bg, fg, blink } = byteToAttr(attrByte);
-			return mkCell(fg, bg, char, blink);
-		});
-		
+		const pipe = Grid.wrapBytes(source).valuePipe.map(bytesToCell);		
 		this.grid.paste(pipe, x, y);
 	}
 
 	/**
 	 * Creates a live EGAText view of an existing byte sequence in EGA standard encoding
 	 * 
-	 * Writing to the EGAText, or its underlying Grid, directly modifies the byte data, and
+	 * Writing to the EGAText, or its Grid, directly modifies the byte data, and
 	 * changes to the byte data affect subsequent reads of the EGAText.
 	 * @param byteData Object specifying width, height and data
 	 * @returns Live EGAText view
@@ -291,19 +316,28 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			throw new Error(`Byte length mismatch (expected width x height x 2 (${byteData.width * byteData.height}) bytes, got ${byteData.data.length})`);
 		}
 		return new EGAText(Grid.wrapBytes(byteData).liveMap(
-			(pair) => {
-				const {bg, fg, blink} = byteToAttr(pair[0]);
-				return mkCell(fg, bg, pair[1], blink);
-			},
-			(cell) => new Uint8ClampedArray([attrToByte(cell.fg, cell.bg, cell.blink), cell.char])
+			bytesToCell,
+			cellToBytes
 		));
 	}
 
+	/**
+	 * Exports the screen's contents as a wide string, converting codepage 437 to unicode.
+	 * @param lineBreak 
+	 * @param blinking If true, characters with the *blink* attribute are replaced with the space (0x20) character
+	 * @returns 
+	 */
 	toString(lineBreak: string = "\n", blinking?: boolean) {
 		return this.grid.valuePipe.map(c => blinking && c.blink ? " " : byte437ToWideChar(c.char))
 			.rows.map(row => row.join("")).join(lineBreak);
 	}
 
+	/**
+	 * Exports the screen's contents as an HTML string, converting codepage 437 to unicode.
+	 * @param palette The colour palette, as an array of RGBA objects or CSS strings
+	 * @param blinkClass CSS class to apply to characters with the *blink* attribute (default: `"ega_blink"`)
+	 * @returns 
+	 */
 	toHTML({palette = egaPalette, lineBreak = "<br>", blinkClass = "ega_blink"}: HTMLOptions) {
 		return this.grid.valuePipe.map(c => {
 			return `<span${blinkClass} style="background-color: ${
@@ -314,6 +348,13 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}).rows.map(row => row.join("")).join(lineBreak);
 	}
 
+	/**
+	 * Creates a rendering context which, when called, paints this EGAText's current contents
+	 * to a canvas
+	 * @param font The font, as an array of Pipe2D<number>
+	 * @param palette The colour palette, as an array of RGBA objects or CSS strings
+	 * @returns 
+	 */
 	createRenderer(font: CrtFont, palette: ArrayLike<RGBA | string> = egaPalette) {
 		const cache = new Map<string, OffscreenCanvas>;
 		const rgbaPalette = Array.from(palette).map(v => typeof v == "string" ? parseRGBA(v) : v);
@@ -349,11 +390,17 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 
 		const bufferState = Grid.solid<OffscreenCanvas | null>(this.width, this.height, null);
 
+		/**
+		 * Renders the screen to a new OffscreenCanvas and returns it
+		 */
 		function rendertoCanvas(): OffscreenCanvas
-		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer>(target: T): T
+		/**
+		 * Renders the screen to an existing canvas
+		 */
+		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer | OffscreenCanvas>(target: T): T
 		function rendertoCanvas(canvasSelector: string): HTMLCanvasElement
-		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer | string) {
-			let targetCanvas: HTMLCanvasElement | undefined;
+		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer | OffscreenCanvas | string) {
+			let targetCanvas: HTMLCanvasElement | OffscreenCanvas | undefined;
 			if (typeof target == "string") {
 				const el = document.querySelector(target);
 				if (!(el instanceof HTMLCanvasElement)) {
@@ -361,7 +408,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 				}
 				targetCanvas = el;
 			} else if (target !== undefined) {
-				targetCanvas = target instanceof HTMLCanvasElement
+				targetCanvas = target instanceof HTMLCanvasElement || target instanceof OffscreenCanvas
 					? target
 					: target.element
 			}
@@ -382,7 +429,9 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			}
 			if (targetCanvas) {
 				if (requiresFlip) {
-					targetCanvas.getContext("2d")!.drawImage(buffer, 0, 0, targetCanvas.width, targetCanvas.height);
+					(targetCanvas as HTMLCanvasElement)
+						.getContext("2d")!
+						.drawImage(buffer, 0, 0, targetCanvas.width, targetCanvas.height);
 				}
 				return target;
 			}
@@ -438,12 +487,25 @@ export class CRT<T extends EGAText = EGAText> {
 		return this.screen.pen(this.foreground, this.background, this.blink);
 	}
 
+	/**
+	 * Sets is CRT context's cursor position
+	 * 
+	 * If the CRT context was initialised with the `pascalCoordinates` option, the top-left cell is addressed as (1,1), otherwise (0,0).
+	 * @param x 
+	 * @param y 
+	 */
 	gotoXY(x: number, y: number) {
 		[this._cursorX, this._cursorY] = this.pascalCoordinates ? [x - 1, y - 1] : [x, y];
 	}
+	/**
+	 * Fills the context's work area with space (0x20) characters.
+	 */
 	clrScr() {
-		this.screen.grid.fill({char: 32, fg: this.foreground, bg: this.background});
+		this.screen.grid.fill({char: 32, fg: this.foreground, bg: this.background, blink: this.blink});
 	}
+	/**
+	 * Writes space (0x20) characters from the cursor's position to the end of the line.
+	 */
 	clrEol() {
 		this.screen.grid.liveRegion(
 			this._cursorX,
@@ -452,6 +514,9 @@ export class CRT<T extends EGAText = EGAText> {
 			1
 		).fill(this.mkCell(32));
 	}
+	/**
+	 * Deletes the line at the cursor, and scrolls the following lines up.
+	 */
 	delLine() {
 		this.screen.grid.liveRegion(
 			0,
@@ -460,6 +525,9 @@ export class CRT<T extends EGAText = EGAText> {
 			this.height - this._cursorY
 		).scroll(0, -1, this.mkCell(32));
 	}
+	/**
+	 * Inserts a line of space (0x20) characters at the cursor, scrolling the current and following lines down.
+	 */
 	insLine() {
 		this.screen.grid.liveRegion(
 			0,
@@ -469,6 +537,15 @@ export class CRT<T extends EGAText = EGAText> {
 		).scroll(0, 1, this.mkCell(32));
 	}
 
+	/**
+	 * Defines a live rectangular subregion
+	 * @param x 
+	 * @param y 
+	 * @param width 
+	 * @param height 
+	 * @param options 
+	 * @returns A live CRT view of a subregion of this screen
+	 */
 	liveRegion(x: number, y: number, width: number, height: number, options: CRTOptions = {}) {
 		return new CRT(this.screen.liveRegion(x, y, width, height), {
 			pascalCoordinates: this.pascalCoordinates,
@@ -477,16 +554,30 @@ export class CRT<T extends EGAText = EGAText> {
 		}, this.background, this.foreground);
 	}
 
+	/**
+	 * Defines a live subregion of this view by specifying a margin.
+	 * @param margin 
+	 * @returns 
+	 */
 	liveInset(margin: number = 1) {
 		return new CRT(this.screen.liveInset(margin));
 	}
 
+	/**
+	 * Draws a border around the region represented by this CRT context, using the currently selected colours.
+	 * @param lineSet 
+	 */
 	drawBorder(lineSet: LineSet): void
 	drawBorder(horizontalLines: 1 | 2, verticalLines: 1 | 2): void
 	drawBorder(setOrHoriz: LineSet | 1 | 2, vert?: 1 | 2): void {
 		const set = getLineSet(setOrHoriz, vert);
 		this.getPen().drawBorder(set);
 	}
+
+	/**
+	 * Writes a string at the current cursor position, moving the cursor to the end of the written text.
+	 * @param s 
+	 */
 	write(...s: (string | number)[]) {
 		const pen = this.getPen();
 		this.screen.grid.batchUpdate(() => {
@@ -503,6 +594,11 @@ export class CRT<T extends EGAText = EGAText> {
 			});
 		});
 	}
+
+	/**
+	 * Writes a string at the current cursor position, moving the cursor to the beginning of the next line.
+	 * @param s 
+	 */
 	writeLn(...text: (string | number)[]) {
 		this.write(...text);
 		this._cursorY++;
