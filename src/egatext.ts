@@ -502,6 +502,8 @@ export class CRT<T extends EGAText = EGAText> {
 	 */
 	clrScr() {
 		this.screen.grid.fill({char: 32, fg: this.foreground, bg: this.background, blink: this.blink});
+		this._cursorX = 0;
+		this._cursorY = 0;
 	}
 	/**
 	 * Writes space (0x20) characters from the cursor's position to the end of the line.

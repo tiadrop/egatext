@@ -12,14 +12,14 @@ See it in use: [☻ The Game With No Name](https://www.aleta.codes/#projects/non
 
 ## General use
 
-`npm install egatext-alpha`
+`npm install egatext`
 
 ```ts
-import { EGAText, vgaFont } from "egatext-alpha";
+import { EGAText, egaFont8Col } from "egatext";
 
 const screen = EGAText.init(80, 25, {
 	target: "#my-canvas", // or canvasElement,
-	font: vgaFont,
+	font: egaFont8Col,
 });
 
 // or headless
@@ -57,7 +57,7 @@ crt.clrEol();
 
 ```ts
 // import .BMF fonts
-import { loadBmfFont } from "egatext-alpha";
+import { loadBmfFont } from "egatext";
 
 const font = await loadBmfFont("url/to.bmf");
 // or font = loadBmfFont(u8aData);
