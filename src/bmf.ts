@@ -1,9 +1,10 @@
 import { Pipe2D } from "@xtia/pipe2d";
 import { CrtFont } from "./types.js";
 
-const isLineRight = (charCode: number) => {
-    // 192 to 223
-    return charCode > 191 && charCode < 224;
+const copyRightEdge = (charCode: number) => {
+	return (charCode >= 176 && charCode <= 178)
+		|| (charCode > 191 && charCode < 224)
+		|| (charCode == 219);
 }
 
 /**
@@ -28,7 +29,7 @@ export function loadBmfFont(data: string | Uint8Array, addColumn: boolean = true
 
 	const rows = bytes.map(addColumn
 		? (b, i) => (
-				[b&128,b&64,b&32,b&16,b&8,b&4,b&2,b&1,isLineRight(Math.floor(i / rowCount)) ? b&1 :0]
+				[b&128,b&64,b&32,b&16,b&8,b&4,b&2,b&1,copyRightEdge(Math.floor(i / rowCount)) ? b&1 :0]
 			).map(n => n > 0 ? 1 : 0)
 		: b => [b&128,b&64,b&32,b&16,b&8,b&4,b&2,b&1].map(n => n > 0 ? 1 : 0));
 
