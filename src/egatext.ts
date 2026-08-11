@@ -239,7 +239,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		const put = (x: number, y: number, char: number | string) => {
 			const fg = resolveValue(foregroundColour);
 			const bg = resolveValue(backgroundColour);
-			this.grid.set(x, y, mkCell(fg, bg, char, blink));
+			this.grid.set(x, y, makePenCell(char));
 		};
 		const write = (x: number, y: number, ..._text: (string | number)[]) => {
 			[..._text.join("")].forEach(wc => {
@@ -252,7 +252,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			fill: (char) => {
 				const fg = resolveValue(foregroundColour);
 				const bg = resolveValue(backgroundColour);
-				this.grid.fill(mkCell(fg, bg, char, blink));
+				this.grid.fill(makePenCell(char));
 			},
 			drawBorder: (setOrHoriz, vert?: 1 | 2) => {
 				const lineSet = getLineSet(setOrHoriz, vert);
@@ -578,13 +578,19 @@ export class CRT<T extends EGAText = EGAText> {
 
 	/**
 	 * Writes a string at the current cursor position, moving the cursor to the end of the written text.
-	 * @param s 
+	 * @param s Text to write
 	 */
 	write(...s: (string | number)[]) {
 		const pen = this.getPen();
 		this.screen.grid.batchUpdate(() => {
 			[...s.join("")].forEach(char => {
-				pen.put(this._cursorX++, this._cursorY, char);
+				if (char === "\n") {
+					this._cursorY++;
+				} else if (char === "\r") {
+					this._cursorX = 0;
+				} else {
+					pen.put(this._cursorX++, this._cursorY, char);
+				}
 				if (this._cursorX == this.width) {
 					this._cursorX = 0;
 					this._cursorY++;
