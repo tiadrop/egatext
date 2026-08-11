@@ -9,28 +9,40 @@ console.log("Building font(s):", Object.keys(fonts).join(", "))
 
 if (!fs.existsSync("src/fonts")) fs.mkdirSync("src/fonts");
 
+const padHex = (n) => n.toString(16).padStart(2, "0");
+
 function runlengthEncode(bytes) {
-	let prev = -1;
-	let runlength = 0;
-	const out = [];
-	const append = () => {
-		if (runlength == 0) return;
-		if (runlength == 1) {
-			out.push(prev)
-		} else {
-			out.push([prev, runlength]);
+	let prev = 0;
+	let out = "";
+	let repeats = 0;
+
+	const writeRepeats = () => {
+		while (repeats > 0) {
+			if (repeats == 1) {
+				out += padHex(prev);
+				repeats--;
+			} else {
+				const r = Math.min(repeats, 17);
+				repeats -= r;
+				out += "*" + (r-2).toString(16);
+			}
 		}
-		runlength = 0;
 	}
-	bytes.forEach(v => {
-		if (v !== prev) {
-			append();
-			prev = v;
+
+	bytes.forEach(byte => {
+		if (byte == prev) {
+			repeats++;
+		} else {
+			writeRepeats();
+			out += padHex(byte);
+			prev = byte;
 		}
-		runlength++;
-	});
-	append();
-	return out;
+	})
+	writeRepeats();
+
+	return out
+		.replace(/[0-9a-f]/g, h => "abcdefghijklmnop"[parseInt(h, 16)])
+		.replace(/([a-z])\1/g, c => c[0].toUpperCase());
 }
 
 Object.entries(fonts).forEach(([name, filename]) => {

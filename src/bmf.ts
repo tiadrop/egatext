@@ -36,14 +36,20 @@ export function loadBmfFont(data: string | Uint8Array, addColumn: boolean = true
 
 }
 
-export function runlengthDecode(values: (number | [number, number])[]) {
+export function runlengthDecode(encoded: string) {
+	let last = 0;
 	const bytes: number[] = [];
-	values.forEach(v => {
-		if (Array.isArray(v)) {
-			bytes.push(...Array.from({length: v[1]}, () => v[0]));
-		} else {
-			bytes.push(v);
-		}
-	});
+	encoded
+		.replace(/[A-Z]/g, c => (c+c).toLowerCase())
+		.replace(/./g, c => "0123456789abcdef"[c.charCodeAt(0) - 97] ?? c)
+		.match(/../g)!.forEach(pair => {
+			if (pair[0] == "*") {
+				let n = parseInt(pair[1], 16) + 2;
+				while (n--) bytes.push(last);
+			} else {
+				last = parseInt(pair, 16);
+				bytes.push(last);
+			}
+		});
 	return new Uint8Array(bytes);
 }
