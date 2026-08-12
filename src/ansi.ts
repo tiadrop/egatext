@@ -8,7 +8,7 @@ export function toANSI(screen: Pipe2D<EGATextCell>, lineBreak: string, blinking:
 	let lastFg = -1;
 	let lastBg = -1;
 
-	return "\x1b[0;" + screen.rows.map(row => {
+	return "\x1b[0m" + screen.rows.map(row => {
 		let s = "";
 		for (let cell of row) {
 			if (cell.bg !== lastBg) {
