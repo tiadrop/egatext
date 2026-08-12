@@ -5,6 +5,7 @@ import { parseRGBA, RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
 import { lineSets } from "./charsets.js";
+import { toANSI } from "./ansi.js";
 
 const BLINK_RATE = 2.1666; //hz
 
@@ -346,6 +347,10 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 				palette[c.fg] ?? palette[0] ?? black
 			}">${byte437ToWideChar(c.char)}</span>`;
 		}).rows.map(row => row.join("")).join(lineBreak);
+	}
+
+	toANSI(lineBreak = "\n", blinking: boolean = false) {
+		return toANSI(this.grid.valuePipe, lineBreak, blinking);
 	}
 
 	/**
