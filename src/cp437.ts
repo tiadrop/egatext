@@ -172,13 +172,18 @@ export const byte437ToWideChar = (code: number) => table[code] ?? String.fromCha
 const inverse = Object.fromEntries(Object.entries(table).map(([cp, ch]) => [ch, cp]));
 
 /**
- * Get the CP437 byte address of a unicode character
+ * Get the CP437 byte address of a unicode character.
+ * 
+ * Returns 0 for characters that can't be represented in code page 437.
  * @param char The char as a string or a codepoint
  * @returns 
  */
 export const wideCharToByte437 = (char: string | number) => {
 	if (typeof char == "number") char = String.fromCharCode(char);
-	if ([...char].length !== 1) throw new Error("Char may only specify a single character")
-    const n = inverse[char] ?? char.charCodeAt(0);
-    return Number(n);
+	if ([...char].length !== 1) throw new Error("Char may only specify a single character");
+    if (char in inverse) {
+        return Number(inverse[char]);
+    }
+    const code = char.charCodeAt(0);
+    return code < 128 ? code : 0;
 }

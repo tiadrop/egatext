@@ -1,22 +1,15 @@
-import { Grid, GridBase } from "@xtia/grid";
+import { Grid, type GridBase } from "@xtia/grid";
 import { byte437ToWideChar, wideCharToByte437 } from "./cp437.js";
-import { BackgroundColour, CanvasContainer, CrtFont, EGAData, ForegroundColour, LineSet } from "./types.js";
+import { AutoRenderOptions, BackgroundColour, CanvasContainer, CrtFont, CRTOptions, EGAData, EGATextCell, ForegroundColour, HTMLOptions, LineSet, NonFunction, Pen } from "./types.js";
 import { parseRGBA, RGBA } from "@xtia/rgba";
 import { renderRGBAPipe } from "@xtia/pipe2d-image";
 import { egaPalette } from "@xtia/rgba/palettes";
 import { lineSets } from "./charsets.js";
-import { toANSI } from "./ansi.js";
+import { toANSIUnicode, toANSIBytes, writeANSI, WriteAnsiOptions } from "./ansi.js";
 
 const BLINK_RATE = 2.1666; //hz
 
 const black = new RGBA(0, 0, 0);
-
-export type EGATextCell = {
-	readonly fg: ForegroundColour;
-	readonly bg: BackgroundColour;
-	readonly char: number;
-	readonly blink?: boolean;
-}
 
 const mkCell = (fg: ForegroundColour, bg: BackgroundColour, char: number | string, blink?: boolean): EGATextCell => ({fg, bg, char: typeof char == "number" ? char : wideCharToByte437(char), ...(blink?{blink}:{})});
 
@@ -40,11 +33,6 @@ const bytesToCell = (bytes: Uint8ClampedArray): EGATextCell => {
 	return {fg, bg, blink, char};
 }
 
-type CRTOptions = {
-	pascalCoordinates?: boolean;
-	lockScroll?: boolean;
-}
-
 const blinkManager = (() => {
 	const entries: {fn: () => void}[] = [];
 	let state = false;
@@ -53,7 +41,7 @@ const blinkManager = (() => {
 		intervalId = setInterval(() => {
 			state = !state;
 			[...entries].forEach(e => e.fn());
-		}, 500/BLINK_RATE);
+		}, 500 / BLINK_RATE);
 	};
 	const stop = () => clearInterval(intervalId!);
 
@@ -73,7 +61,6 @@ const blinkManager = (() => {
 	}
 })();
 
-type Writable = string | number | Writable[];
 
 function getLineSet(styleOrHoriz: LineSet | 1 | 2, vert?: 1 | 2): LineSet {
 	if (vert) {
@@ -83,36 +70,9 @@ function getLineSet(styleOrHoriz: LineSet | 1 | 2, vert?: 1 | 2): LineSet {
 	return styleOrHoriz as LineSet;
 }
 
-export interface Pen {
-	put(x: number, y: number, char: number | string): void;
-	drawBorder(style: LineSet): void;
-	drawBorder(horizontalLines: 1 | 2, verticalLines: 1 | 2): void;
-	write(x: number, y: number, ...text: Writable[]): void;
-	fill(char: number | string): void;
-}
-
-type NonFunction = string | number | boolean | object | symbol | bigint | null | undefined;
 const resolveValue = <T extends NonFunction>(source: T | (() => T)) => {
 	return typeof source == "function" ? source() : source;
 };
-
-type AutoRenderOptions = {
-	font: CrtFont;
-	target: HTMLCanvasElement | CanvasContainer | string;
-	palette?: ArrayLike<RGBA | string>;
-	region?: {
-		readonly x: number;
-		readonly y: number;
-		readonly width: number;
-		readonly height: number;
-	}
-}
-
-type HTMLOptions = {
-	palette?: ArrayLike<RGBA | string>;
-	lineBreak?: string;
-	blinkClass?: string;
-}
 
 function someIterator<T>(iterable: Iterable<T>, predicate: (value: T) => boolean): boolean {
 	for (const value of iterable) {
@@ -125,6 +85,30 @@ function pointInRect(x: number, y: number, rect: {left: number, top: number, rig
 	return x >= rect.left && y >= rect.top && x < rect.right && y < rect.bottom;
 }
 
+
+const lordCodes = {
+	0: 0,
+	1: 1,
+	2: 2,
+	3: 3,
+	4: 4,
+	5: 5,
+	6: 6,
+	7: 7,
+	8: 8,
+	9: 9,
+	")": 10,
+	"!": 11,
+	"@": 12,
+	"#": 13,
+	"$": 14,
+	"%": 15,
+} as Record<string, ForegroundColour>
+
+type LORDOptions = {
+	allowBackground?: boolean;
+	persistColourChanges?: boolean;
+}
 
 export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 
@@ -339,7 +323,7 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 	 * @param blinkClass CSS class to apply to characters with the *blink* attribute (default: `"ega_blink"`)
 	 * @returns 
 	 */
-	toHTML({palette = egaPalette, lineBreak = "<br>", blinkClass = "ega_blink"}: HTMLOptions) {
+	toHTML({palette = egaPalette, lineBreak = "<br>", blinkClass = "ega_blink"}: HTMLOptions = {}) {
 		return this.grid.valuePipe.map(c => {
 			return `<span${blinkClass} style="background-color: ${
 				palette[c.bg] ?? palette[0] ?? black
@@ -349,8 +333,21 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 		}).rows.map(row => row.join("")).join(lineBreak);
 	}
 
-	toANSI(lineBreak = "\n", blinking: boolean = false) {
-		return toANSI(this.grid.valuePipe, lineBreak, blinking);
+	/**
+	 * Renders the virtual screen's contents as a unicode string with ANSI colour codes.
+	 * @param lineBreak 
+	 * @returns Unicode string with ANSI colour codes
+	 */
+	toANSIUnicode(lineBreak = "\n"): string {
+		return toANSIUnicode(this.grid.valuePipe, lineBreak);
+	}
+
+	/**
+	 * Renders the virtual screen's contents as an ASCII-encoded byte sequence with ANSI colour codes.
+	 * @returns ASCII byte sequence with ANSI colour codes
+	 */
+	toANSIBytes() {
+		return toANSIBytes(this.grid.valuePipe);
 	}
 
 	/**
@@ -458,7 +455,6 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 }
 
 export class CRT<T extends EGAText = EGAText> {
-	private pascalCoordinates: boolean;
 	private lockScroll: boolean;
 	private _cursorX: number = 0;
 	private _cursorY: number = 0;
@@ -467,6 +463,7 @@ export class CRT<T extends EGAText = EGAText> {
 	foreground: ForegroundColour;
 	background: BackgroundColour;
 	blink: boolean = false;
+	readonly pascalCoordinates: boolean;
 
 	constructor(
 		readonly screen: T,
@@ -581,6 +578,32 @@ export class CRT<T extends EGAText = EGAText> {
 		this.getPen().drawBorder(set);
 	}
 
+	private writeByte(byte: number, pen: Pen = this.getPen()) {
+		if (byte === 10) {
+			this._cursorY++;
+		} else if (byte === 13) {
+			this._cursorX = 0;
+		} else {
+			pen.put(this._cursorX++, this._cursorY, byte);
+		}
+		if (this._cursorX == this.width) {
+			this._cursorX = 0;
+			this._cursorY++;
+		}
+		if (this._cursorY == this.height) {
+			if (!this.lockScroll) this.screen.grid.scroll(0, -1, this.mkCell(32));
+			this._cursorY--;
+		}
+	}
+
+	writeBytes(...bytes: (number | number[])[]) {
+		const pen = this.getPen();
+		bytes.forEach(b => Array.isArray(b)
+			? b.forEach(c => this.writeByte(c, pen))
+			: this.writeByte(b, pen)
+		)
+	}
+
 	/**
 	 * Writes a string at the current cursor position, moving the cursor to the end of the written text.
 	 * @param s Text to write
@@ -589,20 +612,10 @@ export class CRT<T extends EGAText = EGAText> {
 		const pen = this.getPen();
 		this.screen.grid.batchUpdate(() => {
 			[...s.join("")].forEach(char => {
-				if (char === "\n") {
-					this._cursorY++;
-				} else if (char === "\r") {
-					this._cursorX = 0;
+				if (char == "\n" || char == "\r") {
+					this.writeByte(char.charCodeAt(0));
 				} else {
-					pen.put(this._cursorX++, this._cursorY, char);
-				}
-				if (this._cursorX == this.width) {
-					this._cursorX = 0;
-					this._cursorY++;
-				}
-				if (this._cursorY == this.height) {
-					if (!this.lockScroll) this.screen.grid.scroll(0, -1, this.mkCell(32));
-					this._cursorY--;
+					this.writeByte(wideCharToByte437(char));
 				}
 			});
 		});
@@ -619,6 +632,70 @@ export class CRT<T extends EGAText = EGAText> {
 		if (this._cursorY == this.height) {
 			if (!this.lockScroll) this.screen.grid.scroll(0, -1, this.mkCell(32));
 			this._cursorY--;
+		}
+	}
+
+	/**
+	 * Writes ANSI-encoded text to the virtual screen.
+	 * @param ansiData ASCII byte sequence
+	 * @param options 
+	 */
+	writeANSI(ansiData: Uint8Array | Uint8ClampedArray, options: WriteAnsiOptions = {}) {
+		const pascalCopy = this.screen.getCRT({pascalCoordinates: true});
+		const offset = this.pascalCoordinates ? 0 : 1;
+		pascalCopy.gotoXY(this.cursorX + offset, this.cursorY + offset);
+		pascalCopy.foreground = this.foreground;
+		pascalCopy.background = this.background;
+		writeANSI(pascalCopy, ansiData, options);
+		this.foreground = pascalCopy.foreground;
+		this.background = pascalCopy.background;
+	}
+
+	writeLORD(text: string, options: LORDOptions = {}) {
+		let expectingForeground = false;
+		let expectingBackground = false;
+		const initialBackground = this.background;
+		const initialForeground = this.foreground;
+		[...text].forEach(char => {
+			if (expectingForeground) {
+				expectingForeground = false;
+				if (char == "`") {
+					this.write("`");
+					return;
+				}
+				if (char in lordCodes) {
+					this.foreground = lordCodes[char as keyof typeof lordCodes];
+				} else {
+					this.write("`" + char);
+				}
+				return;
+			}
+			if (expectingBackground) {
+				expectingBackground = false;
+				if (char == "¬") {
+					this.write("¬");
+					return;
+				}
+				if (char in lordCodes && lordCodes[char] < 8) {
+					this.background = lordCodes[char as keyof typeof lordCodes] as BackgroundColour;
+				} else {
+					this.write("¬" + char);
+				}
+				return;
+			}
+			if (char == "`") {
+				expectingForeground = true;
+				return;
+			}
+			if (char == "¬" && options.allowBackground) {
+				expectingBackground = true;
+				return;
+			}
+			this.write(char);
+		});
+		if (options.persistColourChanges) {
+			this.foreground = initialForeground;
+			this.background = initialBackground;
 		}
 	}
 }

@@ -1,9 +1,17 @@
 import { Pipe2D } from "@xtia/pipe2d";
+import { RGBA } from "@xtia/rgba";
 
 export type BackgroundColour = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type ForegroundColour = BackgroundColour | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 
 export type CrtFont = ArrayLike<Pipe2D<number>>;
+
+export type EGATextCell = {
+	readonly fg: ForegroundColour;
+	readonly bg: BackgroundColour;
+	readonly char: number;
+	readonly blink?: boolean;
+}
 
 export type LineSet = {
 	readonly corners: {
@@ -32,3 +40,39 @@ export type EGAData = {
 	readonly height: number;
 	readonly data: Uint8ClampedArray;
 }
+
+export type AutoRenderOptions = {
+	font: CrtFont;
+	target: HTMLCanvasElement | CanvasContainer | string;
+	palette?: ArrayLike<RGBA | string>;
+	region?: {
+		readonly x: number;
+		readonly y: number;
+		readonly width: number;
+		readonly height: number;
+	}
+}
+
+export type HTMLOptions = {
+	palette?: ArrayLike<RGBA | string>;
+	lineBreak?: string;
+	blinkClass?: string;
+}
+
+export type NonFunction = string | number | boolean | object | symbol | bigint | null | undefined;
+
+export interface Pen {
+	put(x: number, y: number, char: number | string): void;
+	drawBorder(style: LineSet): void;
+	drawBorder(horizontalLines: 1 | 2, verticalLines: 1 | 2): void;
+	write(x: number, y: number, ...text: Writable[]): void;
+	fill(char: number | string): void;
+}
+
+type Writable = string | number | Writable[];
+
+export type CRTOptions = {
+	pascalCoordinates?: boolean;
+	lockScroll?: boolean;
+}
+
