@@ -644,15 +644,7 @@ export class CRT<T extends EGAText = EGAText> {
 	 * @param options 
 	 */
 	writeANSI(ansiData: Uint8Array | Uint8ClampedArray, options: WriteAnsiOptions = {}) {
-		const pascalCopy = this.screen.getCRT({pascalCoordinates: true});
-		const offset = this.pascalCoordinates ? 0 : 1;
-		pascalCopy.gotoXY(this.cursorX + offset, this.cursorY + offset);
-		pascalCopy.foreground = this.foreground;
-		pascalCopy.background = this.background;
-		writeANSI(pascalCopy, ansiData, options);
-		this.foreground = pascalCopy.foreground;
-		this.background = pascalCopy.background;
-		this.gotoXY(pascalCopy.cursorX - offset, pascalCopy.cursorY - offset);
+		writeANSI(this, ansiData, options);
 	}
 
 	writeLORD(text: string, options: LORDOptions = {}) {

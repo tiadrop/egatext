@@ -99,17 +99,43 @@ export type WriteAnsiOptions = {
 	stripSauce?: boolean;
 }
 
+type ANSIState = {
+	escSeq: string | null;
+	plain: number[];
+	expectingBracket: boolean;
+	savedCursor: [number, number];
+}
+
+const ansiStates = new WeakMap<CRT, ANSIState>();
+
 export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, options: WriteAnsiOptions) {
-	let escSeq: string | null = null;
-	let plain: number[] = [];
-	let expectingBracket = false;
-	let savedCursor: [number, number] = [1, 1];
+	const state = ansiStates.get(crt) ?? (() => {
+		const state: ANSIState = {
+			escSeq: null,
+			plain: [],
+			expectingBracket: false,
+			savedCursor: [1, 1],
+		};
+		ansiStates.set(crt, state);
+		return state;
+	})();
+
+	const offset = crt.pascalCoordinates ? 0 : 1;
+	const pascalCRT = crt.pascalCoordinates
+		? crt
+		: (() => {
+			const pascalCopy = crt.screen.getCRT({pascalCoordinates: true});
+			pascalCopy.gotoXY(crt.cursorX + offset, crt.cursorY + offset);
+			pascalCopy.foreground = crt.foreground;
+			pascalCopy.background = crt.background;
+			return pascalCopy;
+		})();
 
 	if (options.stripSauce) data = stripSauce(data);
 
 	const flush = () => {
-		crt.writeBytes(plain);
-		plain = [];
+		pascalCRT.writeBytes(state.plain);
+		state.plain = [];
 	};
 
 	let intense = false;
@@ -117,20 +143,20 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 	const mCommands: Record<number, () => void> = {
 		0: () => {
 			intense = false;
-			crt.foreground = 7;
-			crt.blink = false;
-			crt.background = 0;
+			pascalCRT.foreground = 7;
+			pascalCRT.blink = false;
+			pascalCRT.background = 0;
 		},
 		1: () => {
 			intense = true;
-			if (crt.foreground < 8) crt.foreground += 8;
+			if (pascalCRT.foreground < 8) pascalCRT.foreground += 8;
 		},
-		5: () => crt.blink = true,
-		25: () => crt.blink = false,
+		5: () => pascalCRT.blink = true,
+		25: () => pascalCRT.blink = false,
 	};
 
 	const processSequence = (commandChar: string) => {
-		const params = escSeq ? escSeq!.split(";").map(Number) : [];
+		const params = state.escSeq ? state.escSeq!.split(";").map(Number) : [];
 		switch  (commandChar) {
 			case "m":
 				params.forEach(p => {
@@ -140,48 +166,48 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 					}
 					if (p >= 30 && p <= 37) {
 						const egaColour = ansiColourToEGA[p - 30];
-						crt.foreground = (intense ? egaColour + 8 : egaColour) as ForegroundColour;
+						pascalCRT.foreground = (intense ? egaColour + 8 : egaColour) as ForegroundColour;
 						return;
 					}
 					if (p >= 40 && p <= 47) {
-						crt.background = ansiColourToEGA[p - 40] as BackgroundColour;
+						pascalCRT.background = ansiColourToEGA[p - 40] as BackgroundColour;
 						return;
 					}
 					if (p >= 90 && p <= 97) {
-						crt.foreground = ansiColourToEGA[p - 90] + 8 as ForegroundColour;
+						pascalCRT.foreground = ansiColourToEGA[p - 90] + 8 as ForegroundColour;
 						return;
 					}
 					// ignore unsupported codes
 				});
 				break;
 			case "s":
-				savedCursor = [crt.cursorX, crt.cursorY];
+				state.savedCursor = [pascalCRT.cursorX, pascalCRT.cursorY];
 				break;
 			case "u":
-				crt.gotoXY(...savedCursor);
+				pascalCRT.gotoXY(...state.savedCursor);
 				break;
 			case "A": {
 				const count = params[0] ?? 1;
-				crt.gotoXY(crt.cursorX, Math.max(1, crt.cursorY - count));
+				pascalCRT.gotoXY(pascalCRT.cursorX, Math.max(1, pascalCRT.cursorY - count));
 				break;
 			}
 			case "B": {
 				const count = params[0] ?? 1;
-				crt.gotoXY(crt.cursorX, Math.min(crt.height, crt.cursorY + count));
+				pascalCRT.gotoXY(pascalCRT.cursorX, Math.min(pascalCRT.height, pascalCRT.cursorY + count));
 				break;
 			}
 			case "C": {
 				const count = params[0] ?? 1;
-				crt.gotoXY(Math.min(crt.width, crt.cursorX + count), crt.cursorY);
+				pascalCRT.gotoXY(Math.min(pascalCRT.width, pascalCRT.cursorX + count), pascalCRT.cursorY);
 				break;
 			}
 			case "D": {
 				const count = params[0] ?? 1;
-				crt.gotoXY(Math.max(1, crt.cursorX - count), crt.cursorY);
+				pascalCRT.gotoXY(Math.max(1, pascalCRT.cursorX - count), pascalCRT.cursorY);
 				break;
 			}
 			case "H":
-				crt.gotoXY(params[1] ?? 1, params[0] ?? 1);
+				pascalCRT.gotoXY(params[1] ?? 1, params[0] ?? 1);
 				break;
 			case "J": {
 				const param = params[0] ?? 0;
@@ -192,7 +218,7 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 						break;
 					case 2:
 					case 3:
-						crt.clrScr();
+						pascalCRT.clrScr();
 				}
 				break;
 			}
@@ -200,13 +226,13 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 				const param = params[0] ?? 0;
 				switch (param) {
 					case 0:
-						crt.clrEol();
+						pascalCRT.clrEol();
 						break;
 					case 1:
-						let x = crt.cursorX;
-						crt.gotoXY(1, crt.cursorY);
-						crt.clrEol();
-						crt.gotoXY(x, crt.cursorY);
+						let x = pascalCRT.cursorX;
+						pascalCRT.gotoXY(1, pascalCRT.cursorY);
+						pascalCRT.clrEol();
+						pascalCRT.gotoXY(x, pascalCRT.cursorY);
 						break;
 					case 2:
 						// unsupported
@@ -217,32 +243,32 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 			default:
 				// ignore unsupported codes?
 		}
-		escSeq = null;
+		state.escSeq = null;
 	};
 
 	for (const byte of data) {
-		if (escSeq === null) {
-			if (expectingBracket) {
-				expectingBracket = false;
+		if (state.escSeq === null) {
+			if (state.expectingBracket) {
+				state.expectingBracket = false;
 				if (byte == 91 /* [ */) {
 					flush();
-					escSeq = "";
+					state.escSeq = "";
 				} else {
-					plain.push(27);
+					state.plain.push(27, byte);
 				}
 				continue;
 			}
 			if (byte == 27 /* esc */) {
-				expectingBracket = true;
+				state.expectingBracket = true;
 				continue;
 			}
 
-			plain.push(byte);
+			state.plain.push(byte);
 			
 		} else {
 			const char = byte437ToWideChar(byte);
 			if (char === ";" || isNumericChar(byte)) {
-				escSeq += char;
+				state.escSeq += char;
 			} else {
 				processSequence(char);
 			}
@@ -250,6 +276,12 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 	}
 
 	flush();
+
+	if (pascalCRT !== crt) {
+		crt.foreground = pascalCRT.foreground;
+		crt.background = pascalCRT.background;
+		crt.gotoXY(pascalCRT.cursorX - offset, pascalCRT.cursorY - offset);
+	}
 }
 
 function matchBytes(a: ArrayLike<number>, b: ArrayLike<number>) {
