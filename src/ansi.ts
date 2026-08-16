@@ -97,8 +97,6 @@ export type WriteAnsiOptions = {
 	 * COMNT stripping is not currently supported.
 	 */
 	stripSauce?: boolean;
-	initialForeground?: ForegroundColour;
-	initialBackground?: BackgroundColour;
 }
 
 export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, options: WriteAnsiOptions) {
@@ -183,7 +181,7 @@ export function writeANSI(crt: CRT, data: Uint8Array | Uint8ClampedArray, option
 				break;
 			}
 			case "H":
-				crt.gotoXY(params[1], params[0]);
+				crt.gotoXY(params[1] ?? 1, params[0] ?? 1);
 				break;
 			case "J": {
 				const param = params[0] ?? 0;

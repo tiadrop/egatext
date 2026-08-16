@@ -497,6 +497,9 @@ export class CRT<T extends EGAText = EGAText> {
 	 * @param y 
 	 */
 	gotoXY(x: number, y: number) {
+		if (isNaN(x) || isNaN(y)) {
+			throw new Error("Invalid coordinates");
+		}
 		[this._cursorX, this._cursorY] = this.pascalCoordinates ? [x - 1, y - 1] : [x, y];
 	}
 	/**
@@ -649,6 +652,7 @@ export class CRT<T extends EGAText = EGAText> {
 		writeANSI(pascalCopy, ansiData, options);
 		this.foreground = pascalCopy.foreground;
 		this.background = pascalCopy.background;
+		this.gotoXY(pascalCopy.cursorX - offset, pascalCopy.cursorY - offset);
 	}
 
 	writeLORD(text: string, options: LORDOptions = {}) {
