@@ -392,17 +392,19 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 
 		const bufferState = Grid.solid<OffscreenCanvas | null>(this.width, this.height, null);
 
+		const checkTransparency = rgbaPalette.some(c => c.alphaValue < 255);
+
 		/**
-		 * Renders the screen to a new OffscreenCanvas and returns it
+		 * Renders the screen to a new OffscreenCanvas and returns it.
 		 */
 		function rendertoCanvas(): OffscreenCanvas
 		/**
-		 * Renders the screen to an existing canvas
+		 * Renders the screen to an existing canvas.
 		 */
 		function rendertoCanvas<T extends HTMLCanvasElement | CanvasContainer | OffscreenCanvas>(target: T): T
 		function rendertoCanvas(canvasSelector: string): HTMLCanvasElement
 		function rendertoCanvas(target?: HTMLCanvasElement | CanvasContainer | OffscreenCanvas | string) {
-			let targetCanvas: HTMLCanvasElement | OffscreenCanvas | undefined;
+			let targetCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 			if (typeof target == "string") {
 				const el = document.querySelector(target);
 				if (!(el instanceof HTMLCanvasElement)) {
@@ -414,15 +416,27 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 					? target
 					: target.element
 			}
+			const targetCtx = (targetCanvas as HTMLCanvasElement)?.getContext("2d");
 			const cellPipe = blinkManager.state ? blinkPipe : grid.valuePipe;
 			let requiresFlip = false;
+			let requiresClear = false;
 			for (let y = 0; y < grid.height; y++) {
 				for (let x = 0; x < grid.width; x++) {
-					const currentCell = bufferState.get(x, y);
+					const bufferCell = bufferState.get(x, y);
 					const displayCell = cellPipe.get(x, y);
 					const tile = getTile(displayCell);
-					if (currentCell !== tile) {
+					if (bufferCell !== tile) {
 						requiresFlip = true;
+						if (
+							checkTransparency
+							&& (
+								rgbaPalette[displayCell.bg].alphaValue < 255
+								|| rgbaPalette[displayCell.fg].alphaValue < 255
+							)
+						) {
+							requiresClear = true;
+							ctx.clearRect(x * tileWidth, y * tileHeight, tileWidth, tileHeight);
+						}
 						const tile = getTile(displayCell);
 						ctx.drawImage(tile, x * tileWidth, y * tileHeight);
 						bufferState.set(x, y, tile);
@@ -431,9 +445,10 @@ export class EGAText<G extends Grid<EGATextCell> = Grid<EGATextCell>> {
 			}
 			if (targetCanvas) {
 				if (requiresFlip) {
-					(targetCanvas as HTMLCanvasElement)
-						.getContext("2d")!
-						.drawImage(buffer, 0, 0, targetCanvas.width, targetCanvas.height);
+					if (requiresClear) {
+						targetCtx!.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+					}
+					targetCtx!.drawImage(buffer, 0, 0, targetCanvas.width, targetCanvas.height);
 				}
 				return target;
 			}
