@@ -30,7 +30,7 @@
   "dependencies": {
     "@xtia/grid": "^1.0.1",
     "@xtia/pipe2d": "^2.2.1",
-    "@xtia/pipe2d-image": "^1.2.3",
+    "@xtia/pipe2d-image": "^1.2.4",
     "@xtia/rgba": "^1.5.4"
   },
   "devDependencies": {
